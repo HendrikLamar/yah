@@ -8,10 +8,17 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:db:push": "prisma db push",
+    "prisma:seed": "tsx prisma/seed.ts",
     "dkb:test": "bash -lc 'source /home/pi/.hermes/hermes-agent/venv/bin/activate && python scripts/dkb_connection_test.py'",
     "py:test": "bash -lc 'source /home/pi/.hermes/hermes-agent/venv/bin/activate && pytest banking_spike/tests -q'"
   },
   "dependencies": {
+    "@prisma/client": "^7.8.0",
+    "dotenv": "^17.4.2",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
@@ -23,7 +30,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "prisma": "^7.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.22.1",
     "typescript": "^5",
     "vitest": "^4.1.6"
   }

@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AppRole {
+  ADMIN
+  MEMBER
+}
+
+enum MembershipRole {
+  ADMIN
+  MEMBER
+}
+
+enum ConnectionProvider {
+  DKB
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  ERROR
+  REAUTH_REQUIRED
+  DISABLED
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  OTHER
+}
+
+enum VisibilityOwnerType {
+  SHARED
+  USER
+}
+
+enum TransactionDirection {
+  INCOME
+  EXPENSE
+}
+
+enum ResponsibilityType {
+  SHARED
+  USER
+}
+
+enum CategoryKind {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+enum MatchField {
+  PURPOSE_RAW
+  COUNTERPARTY_NAME
+  NORMALIZED_MERCHANT
+  AMOUNT
+  DIRECTION
+  ACCOUNT_ID
+}
+
+enum MatchOperator {
+  CONTAINS
+  EQUALS
+  REGEX
+  STARTS_WITH
+  AMOUNT_GT
+  AMOUNT_LT
+}
+
+enum SyncRunStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL_SUCCESS
+  FAILED
+}
+
+model User {
+  id                  String                @id @default(cuid())
+  email               String                @unique
+  displayName         String
+  passwordHash        String
+  role                AppRole               @default(MEMBER)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  householdMemberships HouseholdMember[]
+  visibleAccounts     Account[]             @relation("AccountVisibilityOwner")
+  responsibleTransactions Transaction[]     @relation("ResponsibleUser")
+  ruleResponsibilityAssignments CategorizationRule[] @relation("RuleResponsibilityUser")
+  createdRules        CategorizationRule[]  @relation("RuleCreator")
+  auditEvents         AuditEvent[]
+}
+
+model Household {
+  id                String               @id @default(cuid())
+  name              String
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  memberships       HouseholdMember[]
+  bankConnections   BankConnection[]
+  accounts          Account[]
+  transactions      Transaction[]
+  categories        Category[]
+  categorizationRules CategorizationRule[]
+  syncRuns          SyncRun[]
+  auditEvents       AuditEvent[]
+}
+
+model HouseholdMember {
+  id             String         @id @default(cuid())
+  householdId    String
+  userId         String
+  membershipRole MembershipRole @default(MEMBER)
+  createdAt      DateTime       @default(now())
+  household      Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+}
+
+model BankConnection {
+  id                    String            @id @default(cuid())
+  householdId           String
+  provider              ConnectionProvider
+  status                ConnectionStatus  @default(ACTIVE)
+  encryptedCredentials  String?
+  lastSuccessfulSyncAt  DateTime?
+  lastErrorMessage      String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  household             Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  accounts              Account[]
+  syncRuns              SyncRun[]
+}
+
+model Account {
+  id                    String              @id @default(cuid())
+  householdId           String
+  bankConnectionId      String
+  externalAccountId     String
+  name                  String
+  ibanLast4             String?
+  currency              String              @default("EUR")
+  accountType           AccountType         @default(CHECKING)
+  visibilityOwnerType   VisibilityOwnerType @default(SHARED)
+  visibilityOwnerUserId String?
+  isActive              Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  household             Household           @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  bankConnection        BankConnection      @relation(fields: [bankConnectionId], references: [id], onDelete: Cascade)
+  visibilityOwnerUser   User?               @relation("AccountVisibilityOwner", fields: [visibilityOwnerUserId], references: [id], onDelete: SetNull)
+  balances              AccountBalance[]
+  transactions          Transaction[]
+  rules                 CategorizationRule[]
+
+  @@unique([bankConnectionId, externalAccountId])
+  @@index([householdId, visibilityOwnerType])
+}
+
+model AccountBalance {
+  id             String   @id @default(cuid())
+  accountId      String
+  balanceDate    DateTime
+  balanceAmount  Decimal  @db.Decimal(14, 2)
+  availableAmount Decimal? @db.Decimal(14, 2)
+  sourceSyncId   String?
+  createdAt      DateTime @default(now())
+  account        Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  sourceSync     SyncRun? @relation(fields: [sourceSyncId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, balanceDate])
+}
+
+model Transaction {
+  id                    String             @id @default(cuid())
+  householdId           String
+  accountId             String
+  externalTransactionId String?
+  bookingDate           DateTime
+  valueDate             DateTime?
+  amount                Decimal            @db.Decimal(14, 2)
+  currency              String             @default("EUR")
+  direction             TransactionDirection
+  counterpartyName      String?
+  counterpartyIban      String?
+  purposeRaw            String
+  normalizedMerchant    String?
+  categoryId            String?
+  responsibilityType    ResponsibilityType @default(SHARED)
+  responsibilityUserId  String?
+  isInternalTransfer    Boolean            @default(false)
+  note                  String?
+  importHash            String             @unique
+  sourceSyncId          String?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  household             Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account               Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category              Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  responsibilityUser    User?              @relation("ResponsibleUser", fields: [responsibilityUserId], references: [id], onDelete: SetNull)
+  sourceSync            SyncRun?           @relation(fields: [sourceSyncId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, bookingDate])
+  @@index([accountId, bookingDate])
+  @@index([categoryId])
+}
+
+model Category {
+  id         String               @id @default(cuid())
+  householdId String
+  parentId   String?
+  name       String
+  slug       String
+  kind       CategoryKind
+  color      String?
+  isSystem   Boolean              @default(false)
+  isArchived Boolean              @default(false)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  household  Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  parent     Category?            @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Category[]           @relation("CategoryTree")
+  transactions Transaction[]
+  rules      CategorizationRule[]
+
+  @@unique([householdId, slug])
+}
+
+model CategorizationRule {
+  id                     String             @id @default(cuid())
+  householdId            String
+  name                   String
+  priority               Int                @default(100)
+  isEnabled              Boolean            @default(true)
+  matchField             MatchField
+  matchOperator          MatchOperator
+  matchValue             String
+  actionCategoryId       String?
+  actionResponsibilityType ResponsibilityType?
+  actionResponsibilityUserId String?
+  actionMarkTransfer     Boolean            @default(false)
+  accountId              String?
+  createdByUserId        String
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  household              Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  actionCategory         Category?          @relation(fields: [actionCategoryId], references: [id], onDelete: SetNull)
+  actionResponsibilityUser User?            @relation("RuleResponsibilityUser", fields: [actionResponsibilityUserId], references: [id], onDelete: SetNull)
+  account                Account?           @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  createdByUser          User               @relation("RuleCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, priority])
+}
+
+model SyncRun {
+  id                       String        @id @default(cuid())
+  householdId              String
+  bankConnectionId         String
+  status                   SyncRunStatus @default(RUNNING)
+  startedAt                DateTime      @default(now())
+  finishedAt               DateTime?
+  accountsCheckedCount     Int           @default(0)
+  transactionsImportedCount Int          @default(0)
+  transactionsUpdatedCount Int           @default(0)
+  errorSummary             String?
+  household                Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  bankConnection           BankConnection @relation(fields: [bankConnectionId], references: [id], onDelete: Cascade)
+  balances                 AccountBalance[]
+  transactions             Transaction[]
+}
+
+model AuditEvent {
+  id          String    @id @default(cuid())
+  householdId String
+  actorUserId String?
+  entityType  String
+  entityId    String
+  eventType   String
+  payloadJson Json
+  createdAt   DateTime  @default(now())
+  household   Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  actorUser   User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, createdAt])
+}
