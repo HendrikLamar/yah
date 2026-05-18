@@ -17,9 +17,11 @@
     "py:test": "bash -lc 'source /home/pi/.hermes/hermes-agent/venv/bin/activate && pytest banking_spike/tests -q'"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "dotenv": "^17.4.2",
     "next": "16.2.6",
+    "pg": "^8.21.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

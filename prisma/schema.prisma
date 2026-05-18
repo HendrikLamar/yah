@@ -18,6 +18,7 @@ enum MembershipRole {
 
 enum ConnectionProvider {
   DKB
+  CSV_UPLOAD
 }
 
 enum ConnectionStatus {
@@ -81,34 +82,52 @@ enum SyncRunStatus {
 }
 
 model User {
-  id                  String                @id @default(cuid())
-  email               String                @unique
-  displayName         String
-  passwordHash        String
-  role                AppRole               @default(MEMBER)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  householdMemberships HouseholdMember[]
-  visibleAccounts     Account[]             @relation("AccountVisibilityOwner")
-  responsibleTransactions Transaction[]     @relation("ResponsibleUser")
-  ruleResponsibilityAssignments CategorizationRule[] @relation("RuleResponsibilityUser")
-  createdRules        CategorizationRule[]  @relation("RuleCreator")
-  auditEvents         AuditEvent[]
+  id                             String               @id @default(cuid())
+  email                          String               @unique
+  displayName                    String
+  passwordHash                   String
+  role                           AppRole              @default(MEMBER)
+  createdAt                      DateTime             @default(now())
+  updatedAt                      DateTime             @updatedAt
+  householdMemberships           HouseholdMember[]
+  visibleAccounts                Account[]            @relation("AccountVisibilityOwner")
+  responsibleTransactions        Transaction[]        @relation("ResponsibleUser")
+  ruleResponsibilityAssignments  CategorizationRule[] @relation("RuleResponsibilityUser")
+  createdRules                   CategorizationRule[] @relation("RuleCreator")
+  auditEvents                    AuditEvent[]
+  sessions                       UserSession[]
+  importBatches                  ImportBatch[]
+}
+
+model UserSession {
+  id                String     @id @default(cuid())
+  userId            String
+  tokenHash         String     @unique
+  expiresAt         DateTime
+  activeHouseholdId String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeHousehold   Household? @relation(fields: [activeHouseholdId], references: [id], onDelete: SetNull)
+
+  @@index([userId, expiresAt])
 }
 
 model Household {
-  id                String               @id @default(cuid())
-  name              String
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  memberships       HouseholdMember[]
-  bankConnections   BankConnection[]
-  accounts          Account[]
-  transactions      Transaction[]
-  categories        Category[]
-  categorizationRules CategorizationRule[]
-  syncRuns          SyncRun[]
-  auditEvents       AuditEvent[]
+  id                    String               @id @default(cuid())
+  name                  String
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  memberships           HouseholdMember[]
+  bankConnections       BankConnection[]
+  accounts              Account[]
+  transactions          Transaction[]
+  categories            Category[]
+  categorizationRules   CategorizationRule[]
+  syncRuns              SyncRun[]
+  importBatches         ImportBatch[]
+  auditEvents           AuditEvent[]
+  activeSessions        UserSession[]
 }
 
 model HouseholdMember {
@@ -198,6 +217,7 @@ model Transaction {
   note                  String?
   importHash            String             @unique
   sourceSyncId          String?
+  importBatchId         String?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   household             Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
@@ -205,10 +225,12 @@ model Transaction {
   category              Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   responsibilityUser    User?              @relation("ResponsibleUser", fields: [responsibilityUserId], references: [id], onDelete: SetNull)
   sourceSync            SyncRun?           @relation(fields: [sourceSyncId], references: [id], onDelete: SetNull)
+  importBatch           ImportBatch?       @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   @@index([householdId, bookingDate])
   @@index([accountId, bookingDate])
   @@index([categoryId])
+  @@index([importBatchId])
 }
 
 model Category {
@@ -273,6 +295,25 @@ model SyncRun {
   bankConnection           BankConnection @relation(fields: [bankConnectionId], references: [id], onDelete: Cascade)
   balances                 AccountBalance[]
   transactions             Transaction[]
+}
+
+model ImportBatch {
+  id            String        @id @default(cuid())
+  householdId   String
+  userId        String
+  sourceFileName String?
+  sourceFormat  String        @default("CSV")
+  accountName   String
+  totalRows     Int
+  importedCount Int           @default(0)
+  skippedCount  Int           @default(0)
+  errorSummary  String?
+  createdAt     DateTime      @default(now())
+  household     Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+
+  @@index([householdId, createdAt])
 }
 
 model AuditEvent {
