@@ -44,5 +44,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# graphify
+graphify-out/cache/
+graphify-out/manifest.json
+graphify-out/.graphify_python
+
 # Claude Code worktrees
 .claude/worktrees/

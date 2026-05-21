@@ -1,8 +1,14 @@
 {
-  "prNumber": 1,
-  "issueNumber": null,
+  "phase": "polish",
+  "branch": "chore/graphify-and-seed-fix",
   "targetBranch": "main",
-  "phase": "review",
-  "lastSyncTimestamp": "2026-05-21T20:10:00.000Z",
-  "submodules": []
+  "prNumber": 3,
+  "issueNumber": null,
+  "planPath": null,
+  "planCommits": [
+    { "message": "fix(auth): use canonical hashPassword in seed script", "step": 1 },
+    { "message": "chore: add graphify knowledge graph", "step": 2 }
+  ],
+  "submodules": {},
+  "lastSyncTimestamp": "2026-05-21T00:00:00Z"
 }
