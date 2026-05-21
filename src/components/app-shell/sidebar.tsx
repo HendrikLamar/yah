@@ -40,11 +40,11 @@ export function Sidebar({ viewer }: SidebarProps) {
         </p>
       </div>
 
-      <nav className="flex flex-col gap-xs py-lg flex-1">
+      <nav aria-label="Main" className="flex flex-col gap-xs py-lg flex-1">
         {items.map((item) => {
           const active = pathname === item.href;
           const classes = [
-            "flex items-center gap-md px-md py-sm text-label-md transition-colors duration-150",
+            "flex items-center gap-md px-md py-sm text-label-md transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2",
             active
               ? "text-secondary font-bold border-r-4 border-secondary bg-surface-container-high"
               : "text-on-surface-variant hover:text-primary hover:bg-surface-container-high",

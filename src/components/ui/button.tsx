@@ -46,7 +46,7 @@ const sizeClasses: Record<Size, string> = {
 
 function composeClasses(variant: Variant, size: Size, className: string) {
   const base =
-    "inline-flex items-center justify-center gap-xs text-label-md transition-all duration-150";
+    "inline-flex items-center justify-center gap-xs text-label-md transition-all duration-150 focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2";
   const sizing = variant === "pill" ? "px-xl py-md" : sizeClasses[size];
   return [base, variantClasses[variant], sizing, className].filter(Boolean).join(" ");
 }

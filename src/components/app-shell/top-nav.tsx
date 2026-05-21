@@ -26,13 +26,13 @@ export function TopNav({ viewer }: TopNavProps) {
       <div className="flex items-center gap-md">
         <button
           aria-label="Open menu"
-          className="lg:hidden p-xs rounded-lg hover:bg-surface-container-high"
+          className="lg:hidden p-xs rounded-lg hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
           onClick={toggle}
           type="button"
         >
           <Icon name="menu" />
         </button>
-        <h1 className="text-headline-sm font-bold text-primary">{title}</h1>
+        <p className="text-headline-sm font-bold text-primary">{title}</p>
       </div>
 
       <div className="flex items-center gap-md">
