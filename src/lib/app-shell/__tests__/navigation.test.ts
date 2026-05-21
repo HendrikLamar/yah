@@ -8,6 +8,7 @@ describe("getPrimaryNavigation", () => {
       { href: "/", label: "Overview" },
       { href: "/dashboard", label: "Dashboard" },
       { href: "/transactions", label: "Transactions" },
+      { href: "/invoices", label: "Invoices" },
       { href: "/rules", label: "Rules" },
       { href: "/categories", label: "Categories" },
       { href: "/accounts", label: "Accounts" },
