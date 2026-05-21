@@ -81,6 +81,13 @@ enum SyncRunStatus {
   FAILED
 }
 
+enum InvoiceMatchStatus {
+  UNMATCHED
+  PARTIALLY_MATCHED
+  AUTO_MATCHED
+  MANUALLY_CONFIRMED
+}
+
 model User {
   id                             String               @id @default(cuid())
   email                          String               @unique
@@ -97,6 +104,7 @@ model User {
   auditEvents                    AuditEvent[]
   sessions                       UserSession[]
   importBatches                  ImportBatch[]
+  uploadedInvoices               InvoiceDocument[]     @relation("InvoiceUploader")
 }
 
 model UserSession {
@@ -126,6 +134,7 @@ model Household {
   categorizationRules   CategorizationRule[]
   syncRuns              SyncRun[]
   importBatches         ImportBatch[]
+  invoiceDocuments      InvoiceDocument[]
   auditEvents           AuditEvent[]
   activeSessions        UserSession[]
 }
@@ -226,11 +235,14 @@ model Transaction {
   responsibilityUser    User?              @relation("ResponsibleUser", fields: [responsibilityUserId], references: [id], onDelete: SetNull)
   sourceSync            SyncRun?           @relation(fields: [sourceSyncId], references: [id], onDelete: SetNull)
   importBatch           ImportBatch?       @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  matchedInvoices       InvoiceDocument[]  @relation("InvoiceMatchedTransaction")
+  invoicePaymentMatches InvoicePaymentMatch[]
 
   @@index([householdId, bookingDate])
   @@index([accountId, bookingDate])
   @@index([categoryId])
   @@index([importBatchId])
+  @@index([householdId, categoryId, bookingDate])
 }
 
 model Category {
@@ -314,6 +326,7 @@ model ImportBatch {
   transactions  Transaction[]
 
   @@index([householdId, createdAt])
+  @@index([userId, createdAt])
 }
 
 model AuditEvent {
@@ -329,4 +342,56 @@ model AuditEvent {
   actorUser   User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([householdId, createdAt])
+}
+
+model InvoiceDocument {
+  id                   String             @id @default(cuid())
+  householdId          String
+  uploadedByUserId     String
+  fileName             String
+  mimeType             String
+  fileData             Bytes
+  documentSha256       String?
+  vendorName           String
+  invoiceNumber        String?
+  invoiceDate          DateTime
+  dueDate              DateTime?
+  totalAmount          Decimal            @db.Decimal(14, 2)
+  currency             String             @default("EUR")
+  notes                String?
+  matchStatus          InvoiceMatchStatus @default(UNMATCHED)
+  matchedTransactionId String?
+  matchConfidence      Decimal?           @db.Decimal(5, 2)
+  matchReason          String?
+  extractedText        String?
+  extractionMethod     String?
+  extractionConfidence Decimal?           @db.Decimal(5, 2)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  household            Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  uploadedByUser       User               @relation("InvoiceUploader", fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+  matchedTransaction   Transaction?       @relation("InvoiceMatchedTransaction", fields: [matchedTransactionId], references: [id], onDelete: SetNull)
+  paymentMatches       InvoicePaymentMatch[]
+
+  @@index([householdId, createdAt])
+  @@index([householdId, matchStatus, invoiceDate])
+  @@index([matchedTransactionId])
+}
+
+model InvoicePaymentMatch {
+  id              String             @id @default(cuid())
+  invoiceId       String
+  transactionId   String
+  allocatedAmount Decimal            @db.Decimal(14, 2)
+  matchStatus     InvoiceMatchStatus @default(MANUALLY_CONFIRMED)
+  matchConfidence Decimal?           @db.Decimal(5, 2)
+  matchReason     String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  invoice         InvoiceDocument    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  transaction     Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId, transactionId])
+  @@index([transactionId, createdAt])
+  @@index([invoiceId, createdAt])
 }
