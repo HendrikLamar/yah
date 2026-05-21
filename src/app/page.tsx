@@ -49,7 +49,7 @@ export default function HomePage() {
       <div className="grid grid-cols-12 gap-gutter">
         <div className="col-span-12 lg:col-span-7">
           <Card>
-            <h3 className="text-headline-sm text-on-surface">Tonight's runbook</h3>
+            <h3 className="text-headline-sm text-on-surface">Tonight&apos;s runbook</h3>
             <pre className="mt-md bg-surface-container-low rounded-lg p-md font-mono text-body-sm text-on-surface overflow-x-auto">
 {`cd /home/pi/.hermes/hermes-agent/scratch/household-finance
 cp .env.dkb.local.example .env.dkb.local

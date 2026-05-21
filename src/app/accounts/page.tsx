@@ -38,7 +38,7 @@ export default function AccountsPage() {
         </div>
         <div className="col-span-12 md:col-span-4">
           <Card>
-            <h3 className="text-headline-sm text-on-surface">Tonight's test outcome</h3>
+            <h3 className="text-headline-sm text-on-surface">Tonight&apos;s test outcome</h3>
             <p className="mt-md text-body-sm text-on-surface">{descriptor.summary}</p>
           </Card>
         </div>
