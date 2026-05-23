@@ -24,6 +24,7 @@ export default async function DashboardPage() {
     prisma.account.findMany({
       where: {
         householdId: context.householdId,
+        isActive: true,
         ...buildAccountVisibilityFilter(context.viewer),
       },
       select: {
@@ -40,6 +41,7 @@ export default async function DashboardPage() {
         ...buildTransactionAccountVisibilityFilter(context.viewer),
       },
       select: {
+        id: true,
         bookingDate: true,
         amount: true,
         direction: true,
@@ -55,6 +57,7 @@ export default async function DashboardPage() {
 
   const snapshot = buildHouseholdSnapshot(
     monthTransactions.map((transaction) => ({
+      id: transaction.id,
       bookingDate: transaction.bookingDate,
       amount: Number(transaction.amount),
       direction: transaction.direction,
@@ -205,9 +208,7 @@ export default async function DashboardPage() {
             },
           ]}
           rows={snapshot.recentTransactions.slice(0, 10)}
-          getRowKey={(t) =>
-            `${t.accountName}-${t.bookingDate.toISOString()}-${t.purposeRaw}`
-          }
+          getRowKey={(t) => t.id}
           emptyState="No movements this month yet."
         />
       </Card>

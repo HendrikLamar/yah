@@ -27,7 +27,10 @@ export function Sidebar({ viewer }: SidebarProps) {
 
   return (
     <aside
+      id="primary-sidebar"
       aria-label="Primary navigation"
+      aria-modal={isOpen ? true : undefined}
+      role={isOpen ? "dialog" : undefined}
       className={[
         "fixed inset-y-0 left-0 w-64 bg-surface-container-low border-r border-outline-variant z-50",
         "flex flex-col transition-transform duration-200",

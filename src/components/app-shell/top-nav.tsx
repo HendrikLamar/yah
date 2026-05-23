@@ -18,14 +18,16 @@ type TopNavProps = {
 
 export function TopNav({ viewer }: TopNavProps) {
   const pathname = usePathname();
-  const { toggle } = useMobileSidebar();
+  const { toggle, isOpen } = useMobileSidebar();
   const title = getPageTitleForPath(pathname);
 
   return (
     <header className="fixed top-0 left-0 right-0 lg:left-64 h-16 bg-surface border-b border-outline-variant z-40 px-lg flex items-center justify-between">
       <div className="flex items-center gap-md">
         <button
-          aria-label="Open menu"
+          aria-label={isOpen ? "Close menu" : "Open menu"}
+          aria-expanded={isOpen}
+          aria-controls="primary-sidebar"
           className="lg:hidden p-xs rounded-lg hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
           onClick={toggle}
           type="button"
