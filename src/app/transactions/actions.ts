@@ -15,14 +15,16 @@ export async function uploadCsvAction(formData: FormData) {
   }
 
   const context = await getViewerHouseholdContext();
+  const ownerUserId = context.viewer?.userId ?? null;
   const text = await file.text();
   const parsed = parseTransactionCsv(text);
   const result = await importCsvTransactions({
     householdId: context.householdId,
     accountName,
     transactions: parsed,
-    ownerUserId: context.viewer?.userId ?? null,
-    userId: context.viewer?.userId ?? "anonymous-import",
+    ownerUserId,
+    responsibilityType: ownerUserId ? "USER" : "SHARED",
+    userId: ownerUserId ?? "anonymous-import",
     sourceFileName: file instanceof File ? file.name : undefined,
   });
 
