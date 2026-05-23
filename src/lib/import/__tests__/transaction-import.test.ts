@@ -14,6 +14,7 @@ vi.mock("@/lib/db/prisma", () => ({
     },
     account: {
       upsert: vi.fn(),
+      findFirst: vi.fn(),
     },
     transaction: {
       createMany: vi.fn(),
@@ -75,5 +76,88 @@ describe("importCsvTransactions", () => {
     expect(firstExternalId).not.toBe(secondExternalId);
     expect(firstExternalId).toContain("user-a");
     expect(secondExternalId).toContain("user-b");
+  });
+
+  it("imports into an existing account without upserting a new one", async () => {
+    vi.mocked(prisma.account.findFirst).mockResolvedValue({
+      id: "account-existing",
+      name: "Girokonto Hendrik",
+    } as never);
+
+    const transactions = [
+      {
+        bookingDate: "2026-05-18",
+        valueDate: "2026-05-18",
+        amount: -12.5,
+        currency: "EUR",
+        direction: "EXPENSE" as const,
+        counterpartyName: "Parkster",
+        purposeRaw: "Parkticket",
+      },
+    ];
+
+    const result = await importCsvTransactions({
+      householdId: "household-1",
+      accountId: "account-existing",
+      ownerUserId: "user-a",
+      userId: "user-a",
+      transactions,
+    });
+
+    expect(prisma.account.findFirst).toHaveBeenCalledWith({
+      where: { id: "account-existing", householdId: "household-1" },
+      select: { id: true, name: true },
+    });
+    expect(prisma.account.upsert).not.toHaveBeenCalled();
+    expect(prisma.bankConnection.upsert).not.toHaveBeenCalled();
+    expect(result.accountName).toBe("Girokonto Hendrik");
+
+    const batchCall = vi.mocked(prisma.importBatch.create).mock.calls[0]?.[0];
+    expect(batchCall?.data.accountName).toBe("Girokonto Hendrik");
+  });
+
+  it("throws when neither accountId nor accountName is supplied", async () => {
+    await expect(
+      importCsvTransactions({
+        householdId: "household-1",
+        userId: "user-a",
+        transactions: [],
+      }),
+    ).rejects.toThrow(/Either accountId or accountName/);
+  });
+
+  it("throws when both accountId and accountName are supplied", async () => {
+    await expect(
+      importCsvTransactions({
+        householdId: "household-1",
+        accountId: "a",
+        accountName: "b",
+        userId: "user-a",
+        transactions: [],
+      }),
+    ).rejects.toThrow(/either accountId or accountName, not both/);
+  });
+
+  it("throws when the existing account is not found in the household", async () => {
+    vi.mocked(prisma.account.findFirst).mockResolvedValue(null as never);
+
+    await expect(
+      importCsvTransactions({
+        householdId: "household-1",
+        accountId: "missing",
+        userId: "user-a",
+        transactions: [
+          {
+            bookingDate: "2026-05-18",
+            valueDate: null,
+            amount: -1,
+            currency: "EUR",
+            direction: "EXPENSE" as const,
+            counterpartyName: null,
+            purposeRaw: "x",
+          },
+        ],
+      }),
+    ).rejects.toThrow(/Account not found/);
   });
 });
