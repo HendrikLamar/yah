@@ -147,7 +147,7 @@ function IconInput({ icon, label, name, type = "text", required, minLength }: Ic
           className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"
         />
         <input
-          className="w-full pl-[48px] pr-md py-md bg-surface border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary-container focus:border-primary transition-all outline-none text-body-md text-on-surface"
+          className="w-full pl-[48px] pr-md py-md bg-surface border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-body-md text-on-surface"
           name={name}
           type={type}
           required={required}

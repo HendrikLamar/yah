@@ -89,12 +89,12 @@ export default async function DashboardPage() {
           <MetricCard hero label="Net this month" value={formatCurrency(snapshot.monthNet)} />
         </div>
         <div className="col-span-12 md:col-span-6">
-          <Card variant="dark">
-            <h3 className="text-headline-sm text-on-primary-container">
+          <Card padding="xl">
+            <h3 className="text-headline-sm text-on-surface">
               How you spend together
             </h3>
-            <p className="mt-md text-body-md">
-              <span className="text-display-lg text-secondary-fixed tabular-nums">
+            <p className="mt-md text-body-md text-on-surface-variant">
+              <span className="text-display-lg text-secondary tabular-nums">
                 {sharedPercent}%
               </span>
               <span className="ml-sm">of expenses were shared this month.</span>
