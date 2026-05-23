@@ -5,6 +5,13 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import {
+  callAnthropicVisionFallback,
+  isFallbackConfigured,
+  shouldRunFallback,
+  type InvoiceFallbackProvider,
+} from "./ai-fallback";
+
 const execFileAsync = promisify(execFile);
 const OCR_LANGUAGES = "deu+eng";
 const MIN_PDF_TEXT_LENGTH = 40;
@@ -21,9 +28,17 @@ type InvoiceExtractionPayload = {
 
 export type InvoiceExtractionResult = InvoiceExtractionPayload & {
   text: string;
-  method: "pdf-text" | "pdf-ocr" | "image-ocr" | "plain-text" | "unknown";
+  method:
+    | "pdf-text"
+    | "pdf-ocr"
+    | "image-ocr"
+    | "plain-text"
+    | "unknown"
+    | "ai-fallback";
   confidence: number;
   documentSha256: string;
+  fallbackProvider?: string;
+  fallbackModel?: string;
 };
 
 export function parseInvoiceMetadataFromText(text: string): InvoiceExtractionPayload {
@@ -61,7 +76,11 @@ export function parseInvoiceMetadataFromText(text: string): InvoiceExtractionPay
   };
 }
 
-export async function extractInvoiceMetadataFromFile(file: File, prereadBuffer?: Buffer): Promise<InvoiceExtractionResult> {
+export async function extractInvoiceMetadataFromFile(
+  file: File,
+  prereadBuffer?: Buffer,
+  options?: { fallbackProvider?: InvoiceFallbackProvider | null },
+): Promise<InvoiceExtractionResult> {
   const buffer = prereadBuffer ?? Buffer.from(await file.arrayBuffer());
   const mimeType = (file.type || guessMimeType(file.name)).toLowerCase();
   const documentSha256 = createHash("sha256").update(buffer).digest("hex");
@@ -87,12 +106,68 @@ export async function extractInvoiceMetadataFromFile(file: File, prereadBuffer?:
   const parsed = parseInvoiceMetadataFromText(text);
   const confidence = calculateExtractionConfidence(parsed);
 
-  return {
+  const baseResult: InvoiceExtractionResult = {
     ...parsed,
     text,
     method,
     confidence,
     documentSha256,
+  };
+
+  const fallbackProvider =
+    options?.fallbackProvider === undefined
+      ? isFallbackConfigured()
+        ? callAnthropicVisionFallback
+        : null
+      : options.fallbackProvider;
+
+  if (
+    fallbackProvider &&
+    shouldRunFallback({
+      vendorName: parsed.vendorName,
+      invoiceNumber: parsed.invoiceNumber,
+      invoiceDate: parsed.invoiceDate,
+      totalAmount: parsed.totalAmount,
+      confidence,
+    })
+  ) {
+    try {
+      const fallback = await fallbackProvider({
+        buffer,
+        mimeType,
+        fileName: file.name,
+      });
+      const enriched = mergeFallbackPayload(parsed, fallback.payload);
+      const enrichedConfidence = calculateExtractionConfidence(enriched);
+      return {
+        ...enriched,
+        text,
+        method: "ai-fallback",
+        confidence: Math.max(confidence, enrichedConfidence, 0.6),
+        documentSha256,
+        fallbackProvider: fallback.provider,
+        fallbackModel: fallback.model,
+      };
+    } catch (error) {
+      console.error("[invoice-extraction] AI fallback failed", error);
+      return baseResult;
+    }
+  }
+
+  return baseResult;
+}
+
+function mergeFallbackPayload(
+  local: InvoiceExtractionPayload,
+  remote: InvoiceExtractionPayload,
+): InvoiceExtractionPayload {
+  return {
+    vendorName: local.vendorName ?? remote.vendorName,
+    invoiceNumber: local.invoiceNumber ?? remote.invoiceNumber,
+    invoiceDate: local.invoiceDate ?? remote.invoiceDate,
+    dueDate: local.dueDate ?? remote.dueDate,
+    totalAmount: local.totalAmount ?? remote.totalAmount,
+    currency: local.totalAmount !== null ? local.currency : remote.currency,
   };
 }
 
