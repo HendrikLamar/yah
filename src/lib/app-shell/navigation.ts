@@ -10,6 +10,7 @@ const PRIMARY_NAVIGATION: NavigationItem[] = [
   { href: "/", label: "Overview", icon: "insights" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/transactions", label: "Transactions", icon: "receipt_long" },
+  { href: "/invoices", label: "Invoices", icon: "request_quote" },
   { href: "/accounts", label: "Accounts", icon: "account_balance" },
   { href: "/categories", label: "Categories", icon: "label" },
   { href: "/rules", label: "Rules", icon: "rule" },

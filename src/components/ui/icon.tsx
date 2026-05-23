@@ -20,6 +20,7 @@ export type IconName =
   | "menu"
   | "password"
   | "receipt_long"
+  | "request_quote"
   | "rule"
   | "settings"
   | "upload"

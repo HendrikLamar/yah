@@ -1,8 +1,7 @@
-import { scryptSync, randomBytes } from "node:crypto";
-
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
+import { hashPassword } from "@/lib/auth/password";
 import { shouldSeedDemoData } from "./seed-demo";
 
 const prisma = (() => {
@@ -20,13 +19,6 @@ const prisma = (() => {
     adapter: new PrismaPg({ connectionString }),
   });
 })();
-
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-
-  return `scrypt$${salt}$${hash}`;
-}
 
 const SYSTEM_CATEGORIES = [
   ["salary", "Salary", "INCOME"],
