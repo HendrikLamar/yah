@@ -3,7 +3,11 @@ import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { prisma } from "@/lib/db/prisma";
-import { getViewerHouseholdContext } from "@/lib/household/viewer";
+import { formatDateRange, formatMaskedIban, formatNumber } from "@/lib/format";
+import {
+  buildAccountVisibilityFilter,
+  getViewerHouseholdContext,
+} from "@/lib/household/viewer";
 
 type AccountRow = {
   id: string;
@@ -32,20 +36,12 @@ const PROVIDER_LABEL: Record<AccountRow["provider"], string> = {
 
 export default async function AccountsPage() {
   const context = await getViewerHouseholdContext();
-  const visibilityFilter = context.viewer
-    ? {
-        OR: [
-          { visibilityOwnerType: "SHARED" as const },
-          { visibilityOwnerUserId: context.viewer.userId },
-        ],
-      }
-    : {};
 
   const accounts = await prisma.account.findMany({
     where: {
       householdId: context.householdId,
       isActive: true,
-      ...visibilityFilter,
+      ...buildAccountVisibilityFilter(context.viewer),
     },
     include: {
       bankConnection: { select: { provider: true } },
@@ -59,7 +55,10 @@ export default async function AccountsPage() {
   const ranges = accountIds.length
     ? await prisma.transaction.groupBy({
         by: ["accountId"],
-        where: { accountId: { in: accountIds } },
+        where: {
+          householdId: context.householdId,
+          accountId: { in: accountIds },
+        },
         _min: { bookingDate: true },
         _max: { bookingDate: true },
       })
@@ -104,8 +103,7 @@ export default async function AccountsPage() {
             {
               key: "iban",
               header: "IBAN",
-              render: (account) =>
-                account.ibanLast4 ? `····${account.ibanLast4}` : "—",
+              render: (account) => formatMaskedIban(account.ibanLast4),
             },
             {
               key: "type",
@@ -136,19 +134,15 @@ export default async function AccountsPage() {
               header: "Transactions",
               align: "right",
               tabularNums: true,
-              render: (account) => account.transactionCount.toLocaleString("de-DE"),
+              render: (account) => formatNumber(account.transactionCount),
             },
             {
               key: "period",
               header: "Period",
-              render: (account) => {
-                if (!account.earliestBookingDate || !account.latestBookingDate) {
-                  return "—";
-                }
-                const start = account.earliestBookingDate.toISOString().slice(0, 10);
-                const end = account.latestBookingDate.toISOString().slice(0, 10);
-                return start === end ? start : `${start} → ${end}`;
-              },
+              render: (account) =>
+                account.earliestBookingDate && account.latestBookingDate
+                  ? formatDateRange(account.earliestBookingDate, account.latestBookingDate)
+                  : "—",
             },
           ]}
           rows={rows}

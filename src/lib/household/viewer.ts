@@ -23,3 +23,49 @@ export async function getViewerHouseholdContext(): Promise<ViewerHouseholdContex
 
   redirect(LOGIN_REQUIRED_REDIRECT);
 }
+
+type Viewer = ViewerHouseholdContext["viewer"];
+
+type AccountVisibilityFilter =
+  | {
+      OR: [
+        { visibilityOwnerType: "SHARED" },
+        { visibilityOwnerUserId: string },
+      ];
+    }
+  | Record<string, never>;
+
+type TransactionAccountVisibilityFilter =
+  | {
+      OR: [
+        { account: { visibilityOwnerType: "SHARED" } },
+        { account: { visibilityOwnerUserId: string } },
+      ];
+    }
+  | Record<string, never>;
+
+export function buildAccountVisibilityFilter(viewer: Viewer): AccountVisibilityFilter {
+  if (!viewer) {
+    return {};
+  }
+  return {
+    OR: [
+      { visibilityOwnerType: "SHARED" },
+      { visibilityOwnerUserId: viewer.userId },
+    ],
+  };
+}
+
+export function buildTransactionAccountVisibilityFilter(
+  viewer: Viewer,
+): TransactionAccountVisibilityFilter {
+  if (!viewer) {
+    return {};
+  }
+  return {
+    OR: [
+      { account: { visibilityOwnerType: "SHARED" } },
+      { account: { visibilityOwnerUserId: viewer.userId } },
+    ],
+  };
+}

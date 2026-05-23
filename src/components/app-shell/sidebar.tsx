@@ -11,7 +11,11 @@ import { getPrimaryNavigation } from "@/lib/app-shell/navigation";
 import { useMobileSidebar } from "./mobile-sidebar-context";
 
 type SidebarProps = {
-  viewer: { displayName: string; householdName: string | null } | null;
+  viewer: {
+    displayName: string;
+    email: string;
+    householdName: string | null;
+  } | null;
 };
 
 export function Sidebar({ viewer }: SidebarProps) {
@@ -23,6 +27,7 @@ export function Sidebar({ viewer }: SidebarProps) {
 
   return (
     <aside
+      aria-label="Primary navigation"
       className={[
         "fixed inset-y-0 left-0 w-64 bg-surface-container-low border-r border-outline-variant z-50",
         "flex flex-col transition-transform duration-200",

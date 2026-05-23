@@ -1,7 +1,32 @@
 import type { CSSProperties } from "react";
 
+export type IconName =
+  | "account_balance"
+  | "account_circle"
+  | "badge"
+  | "cancel"
+  | "check_circle"
+  | "dashboard"
+  | "email"
+  | "error"
+  | "group"
+  | "home"
+  | "insights"
+  | "label"
+  | "lock"
+  | "login"
+  | "logout"
+  | "mail"
+  | "menu"
+  | "password"
+  | "receipt_long"
+  | "rule"
+  | "settings"
+  | "upload"
+  | "upload_file";
+
 type IconProps = {
-  name: string;
+  name: IconName;
   filled?: boolean;
   className?: string;
   ariaLabel?: string;

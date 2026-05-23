@@ -4,26 +4,15 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { buildHouseholdSnapshot } from "@/lib/analysis/household-snapshot";
 import { prisma } from "@/lib/db/prisma";
-import { getViewerHouseholdContext } from "@/lib/household/viewer";
+import { formatCurrency, formatIsoDate } from "@/lib/format";
+import {
+  buildAccountVisibilityFilter,
+  buildTransactionAccountVisibilityFilter,
+  getViewerHouseholdContext,
+} from "@/lib/household/viewer";
 
 export default async function DashboardPage() {
   const context = await getViewerHouseholdContext();
-  const visibilityFilter = context.viewer
-    ? {
-        OR: [
-          { account: { visibilityOwnerType: "SHARED" as const } },
-          { account: { visibilityOwnerUserId: context.viewer.userId } },
-        ],
-      }
-    : {};
-  const accountVisibilityFilter = context.viewer
-    ? {
-        OR: [
-          { visibilityOwnerType: "SHARED" as const },
-          { visibilityOwnerUserId: context.viewer.userId },
-        ],
-      }
-    : {};
 
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -35,7 +24,12 @@ export default async function DashboardPage() {
     prisma.account.findMany({
       where: {
         householdId: context.householdId,
-        ...accountVisibilityFilter,
+        ...buildAccountVisibilityFilter(context.viewer),
+      },
+      select: {
+        id: true,
+        name: true,
+        visibilityOwnerType: true,
       },
       orderBy: { name: "asc" },
     }),
@@ -43,11 +37,17 @@ export default async function DashboardPage() {
       where: {
         householdId: context.householdId,
         bookingDate: { gte: monthStart, lte: monthEnd },
-        ...visibilityFilter,
+        ...buildTransactionAccountVisibilityFilter(context.viewer),
       },
-      include: {
-        account: true,
-        category: true,
+      select: {
+        bookingDate: true,
+        amount: true,
+        direction: true,
+        responsibilityType: true,
+        purposeRaw: true,
+        counterpartyName: true,
+        account: { select: { name: true } },
+        category: { select: { name: true } },
       },
       orderBy: { bookingDate: "desc" },
     }),
@@ -182,7 +182,7 @@ export default async function DashboardPage() {
             {
               key: "date",
               header: "Date",
-              render: (t) => t.bookingDate.toISOString().slice(0, 10),
+              render: (t) => formatIsoDate(t.bookingDate),
             },
             { key: "account", header: "Account", render: (t) => t.accountName },
             {
@@ -231,11 +231,4 @@ function SplitPanel({
       <p className="mt-sm text-body-sm text-on-surface-variant">{detail}</p>
     </div>
   );
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("de-DE", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
 }

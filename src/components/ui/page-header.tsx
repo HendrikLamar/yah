@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 
-import { Badge } from "./badge";
-
-type StatusVariant = "success" | "error" | "info" | "neutral";
+import { Badge, type BadgeVariant } from "./badge";
 
 type PageHeaderProps = {
   eyebrow: string;
   title: string;
   description?: string;
-  status?: { label: string; variant: StatusVariant };
+  status?: { label: string; variant: BadgeVariant };
   children?: ReactNode;
 };
 

@@ -12,10 +12,7 @@ type AppShellProps = {
 
 export async function AppShell({ children }: AppShellProps) {
   const viewer = await getCurrentViewer();
-  const viewerLite = viewer
-    ? { displayName: viewer.displayName, householdName: viewer.householdName }
-    : null;
-  const viewerFull = viewer
+  const viewerProps = viewer
     ? {
         displayName: viewer.displayName,
         email: viewer.email,
@@ -26,8 +23,8 @@ export async function AppShell({ children }: AppShellProps) {
   return (
     <MobileSidebarProvider>
       <div className="min-h-screen bg-background">
-        <Sidebar viewer={viewerLite} />
-        <TopNav viewer={viewerFull} />
+        <Sidebar viewer={viewerProps} />
+        <TopNav viewer={viewerProps} />
         <main className="pt-16 lg:ml-64 px-gutter">
           <div className="mx-auto max-w-[1280px] py-lg">{children}</div>
         </main>

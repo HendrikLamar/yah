@@ -5,7 +5,11 @@ import { DataTable } from "@/components/ui/data-table";
 import { Icon } from "@/components/ui/icon";
 import { PageHeader } from "@/components/ui/page-header";
 import { prisma } from "@/lib/db/prisma";
-import { getViewerHouseholdContext } from "@/lib/household/viewer";
+import { formatCurrency, formatIsoDate } from "@/lib/format";
+import {
+  buildTransactionAccountVisibilityFilter,
+  getViewerHouseholdContext,
+} from "@/lib/household/viewer";
 
 import { uploadCsvAction } from "./actions";
 
@@ -15,30 +19,27 @@ type TransactionsPageProps = {
 
 export default async function TransactionsPage({ searchParams }: TransactionsPageProps) {
   const context = await getViewerHouseholdContext();
-  const visibilityFilter = context.viewer
-    ? {
-        OR: [
-          { account: { visibilityOwnerType: "SHARED" as const } },
-          { account: { visibilityOwnerUserId: context.viewer.userId } },
-        ],
-      }
-    : {};
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const imported = firstValue(resolvedSearchParams.imported);
   const skipped = firstValue(resolvedSearchParams.skipped);
   const account = firstValue(resolvedSearchParams.account);
   const error = firstValue(resolvedSearchParams.error);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const transactions: any[] = await prisma.transaction.findMany({
+  const transactions = await prisma.transaction.findMany({
     where: {
       householdId: context.householdId,
-      ...visibilityFilter,
+      ...buildTransactionAccountVisibilityFilter(context.viewer),
     },
-    include: {
-      account: true,
-      category: true,
-      responsibilityUser: true,
+    select: {
+      id: true,
+      bookingDate: true,
+      amount: true,
+      purposeRaw: true,
+      counterpartyName: true,
+      responsibilityType: true,
+      account: { select: { name: true } },
+      category: { select: { name: true } },
+      responsibilityUser: { select: { displayName: true } },
     },
     orderBy: { bookingDate: "desc" },
     take: 20,
@@ -160,7 +161,7 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
             {
               key: "date",
               header: "Date",
-              render: (t) => t.bookingDate.toISOString().slice(0, 10),
+              render: (t) => formatIsoDate(t.bookingDate),
             },
             { key: "account", header: "Account", render: (t) => t.account.name },
             {
@@ -201,11 +202,4 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
 
 function firstValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("de-DE", {
-    style: "currency",
-    currency: "EUR",
-  }).format(value);
 }

@@ -1,7 +1,9 @@
+import type { IconName } from "@/components/ui/icon";
+
 export type NavigationItem = {
   href: string;
   label: string;
-  icon: string;
+  icon: IconName;
 };
 
 const PRIMARY_NAVIGATION: NavigationItem[] = [
@@ -19,6 +21,14 @@ export function getPrimaryNavigation(): NavigationItem[] {
 }
 
 export function getPageTitleForPath(pathname: string): string {
-  const item = PRIMARY_NAVIGATION.find((entry) => entry.href === pathname);
-  return item?.label ?? "yah";
+  const exact = PRIMARY_NAVIGATION.find((entry) => entry.href === pathname);
+  if (exact) {
+    return exact.label;
+  }
+
+  const nested = PRIMARY_NAVIGATION
+    .filter((entry) => entry.href !== "/" && pathname.startsWith(`${entry.href}/`))
+    .sort((left, right) => right.href.length - left.href.length)[0];
+
+  return nested?.label ?? "yah";
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 
 type Variant = "primary" | "secondary" | "ghost" | "pill";
 type Size = "sm" | "md";
@@ -9,8 +9,7 @@ type Size = "sm" | "md";
 type BaseProps = {
   variant: Variant;
   size?: Size;
-  icon?: string;
-  iconFilled?: boolean;
+  icon?: IconName;
   className?: string;
   children: ReactNode;
 };
@@ -52,11 +51,11 @@ function composeClasses(variant: Variant, size: Size, className: string) {
 }
 
 export function Button(props: ButtonProps) {
-  const { variant, size = "md", icon, iconFilled, className = "", children } = props;
+  const { variant, size = "md", icon, className = "", children } = props;
   const classes = composeClasses(variant, size, className);
   const content = (
     <>
-      {icon ? <Icon name={icon} filled={iconFilled} /> : null}
+      {icon ? <Icon name={icon} /> : null}
       <span>{children}</span>
     </>
   );

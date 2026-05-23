@@ -1,17 +1,17 @@
 import type { ReactNode } from "react";
 
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 
-type Variant = "success" | "error" | "info" | "neutral";
+export type BadgeVariant = "success" | "error" | "info" | "neutral";
 
 type BadgeProps = {
-  variant: Variant;
-  icon?: string;
+  variant: BadgeVariant;
+  icon?: IconName;
   className?: string;
   children: ReactNode;
 };
 
-const variantClasses: Record<Variant, string> = {
+const variantClasses: Record<BadgeVariant, string> = {
   success:
     "bg-secondary-container text-on-secondary-container px-sm py-xs rounded-full text-[12px] font-medium tracking-wider",
   error:

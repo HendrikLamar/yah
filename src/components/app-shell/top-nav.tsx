@@ -37,7 +37,10 @@ export function TopNav({ viewer }: TopNavProps) {
 
       <div className="flex items-center gap-md">
         {viewer ? (
-          <div className="flex items-center gap-sm">
+          <div
+            aria-label={`Signed in as ${viewer.displayName}${viewer.householdName ? ` (${viewer.householdName})` : ""}`}
+            className="flex items-center gap-sm"
+          >
             <div className="w-8 h-8 rounded-[9999px] border border-outline-variant flex items-center justify-center bg-surface-container-low">
               <Icon name="account_circle" />
             </div>

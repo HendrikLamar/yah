@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { PageHeader } from "@/components/ui/page-header";
 import { getCurrentViewer } from "@/lib/auth/session";
 
@@ -129,7 +129,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
 }
 
 type IconInputProps = {
-  icon: string;
+  icon: IconName;
   label: string;
   name: string;
   type?: string;
