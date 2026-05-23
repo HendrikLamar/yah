@@ -23,18 +23,22 @@ vi.mock("@/lib/db/prisma", () => ({
     importBatch: {
       create: vi.fn(),
     },
+    categorizationRule: {
+      findMany: vi.fn(),
+    },
   },
 }));
 
 describe("importCsvTransactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.category.findUnique).mockResolvedValue({ id: "category-1" } as never);
+    vi.mocked(prisma.category.findUnique).mockResolvedValue({ id: "category-uncat" } as never);
     vi.mocked(prisma.bankConnection.upsert).mockResolvedValue({ id: "connection-1" } as never);
     vi.mocked(prisma.account.upsert).mockResolvedValue({ id: "account-1", name: "CSV Import" } as never);
     vi.mocked(prisma.transaction.createMany).mockResolvedValue({ count: 1 } as never);
     vi.mocked(prisma.transaction.updateMany).mockResolvedValue({ count: 1 } as never);
     vi.mocked(prisma.importBatch.create).mockResolvedValue({ id: "batch-1" } as never);
+    vi.mocked(prisma.categorizationRule.findMany).mockResolvedValue([] as never);
   });
 
   it("uses different private account identities for different users even with the same account name", async () => {
@@ -159,5 +163,85 @@ describe("importCsvTransactions", () => {
         ],
       }),
     ).rejects.toThrow(/Account not found/);
+  });
+
+  it("applies an enabled rule at import time to set categoryId and isInternalTransfer", async () => {
+    vi.mocked(prisma.categorizationRule.findMany).mockResolvedValue([
+      {
+        id: "rule-1",
+        householdId: "household-1",
+        name: "REWE → Groceries",
+        priority: 100,
+        isEnabled: true,
+        matchField: "COUNTERPARTY_NAME",
+        matchOperator: "CONTAINS",
+        matchValue: "REWE",
+        accountId: null,
+        actionCategoryId: "category-groceries",
+        actionResponsibilityType: "SHARED",
+        actionResponsibilityUserId: null,
+        actionMarkTransfer: false,
+        createdByUserId: "user-a",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: "rule-2",
+        householdId: "household-1",
+        name: "Sparen → transfer",
+        priority: 200,
+        isEnabled: true,
+        matchField: "PURPOSE_RAW",
+        matchOperator: "CONTAINS",
+        matchValue: "Sparen",
+        accountId: null,
+        actionCategoryId: null,
+        actionResponsibilityType: null,
+        actionResponsibilityUserId: null,
+        actionMarkTransfer: true,
+        createdByUserId: "user-a",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ] as never);
+
+    vi.mocked(prisma.transaction.createMany).mockResolvedValue({ count: 2 } as never);
+
+    await importCsvTransactions({
+      householdId: "household-1",
+      accountName: "Giro",
+      ownerUserId: "user-a",
+      userId: "user-a",
+      transactions: [
+        {
+          bookingDate: "2026-05-02",
+          valueDate: "2026-05-02",
+          amount: -42.5,
+          currency: "EUR",
+          direction: "EXPENSE",
+          counterpartyName: "REWE BERLIN",
+          purposeRaw: "Wocheneinkauf",
+        },
+        {
+          bookingDate: "2026-05-03",
+          valueDate: "2026-05-03",
+          amount: -500,
+          currency: "EUR",
+          direction: "EXPENSE",
+          counterpartyName: "Hendrik Sparkonto",
+          purposeRaw: "Sparen Mai",
+        },
+      ],
+    });
+
+    const createManyCall = vi.mocked(prisma.transaction.createMany).mock.calls[0]?.[0];
+    const rows = createManyCall?.data as Array<Record<string, unknown>>;
+
+    expect(rows[0]?.categoryId).toBe("category-groceries");
+    expect(rows[0]?.responsibilityType).toBe("SHARED");
+    expect(rows[0]?.isInternalTransfer).toBe(false);
+
+    expect(rows[1]?.categoryId).toBe("category-uncat");
+    expect(rows[1]?.isInternalTransfer).toBe(true);
   });
 });
