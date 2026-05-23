@@ -1,53 +1,121 @@
-import { FeaturePage } from "@/components/app-shell/feature-page";
+import { Card } from "@/components/ui/card";
+import { Icon } from "@/components/ui/icon";
+import { PageHeader } from "@/components/ui/page-header";
 import { getDkbConnectorDescriptor } from "@/lib/banking/dkb-connector";
 
 export default function HomePage() {
   const descriptor = getDkbConnectorDescriptor(process.env);
-  const statusTone = descriptor.status === "ready_for_test" ? "success" : "warning";
+  const statusVariant = descriptor.status === "ready_for_test" ? "success" : "neutral";
 
   return (
-    <FeaturePage
-      eyebrow="overview"
-      title="Project status before tonight's live DKB test"
-      description="The product foundation can move forward without exposing credentials: app shell, connector abstraction, and the Python FinTS spike are in place. Tonight we only need to provide the real DKB data in .env.dkb.local and run the connection test."
-      statusLabel={descriptor.summary}
-      statusTone={statusTone}
-      cards={[
-        {
-          title: "DKB connector spike",
-          body: "The live test harness is ready. It bootstraps TAN mechanisms, discovers accounts, fetches balances, and attempts recent transactions.",
-        },
-        {
-          title: "Safe fallback",
-          body: "If DKB FinTS proves unreliable tonight, the MVP can still continue with DKB export ingestion while keeping the same downstream transaction pipeline.",
-        },
-        {
-          title: "Next build targets",
-          body: "After the bank test, the next implementation wave is account persistence, transaction import, categories, and reporting pages.",
-        },
-      ]}
-    >
-      <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <article className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
-          <h3 className="text-lg font-semibold text-slate-100">Tonight&apos;s runbook</h3>
-          <pre className="mt-4 overflow-x-auto rounded-2xl bg-black/40 p-4 text-sm text-emerald-200">
+    <>
+      <PageHeader
+        eyebrow="overview"
+        title="Project status before tonight's live DKB test"
+        description="The product foundation can move forward without exposing credentials: app shell, connector abstraction, and the Python FinTS spike are in place. Tonight we only need to provide the real DKB data in .env.dkb.local and run the connection test."
+        status={{ label: descriptor.summary, variant: statusVariant }}
+      />
+
+      <div className="grid grid-cols-12 gap-gutter mb-lg">
+        <div className="col-span-12 md:col-span-4">
+          <Card>
+            <h3 className="text-headline-sm text-on-surface">DKB connector spike</h3>
+            <p className="mt-md text-body-sm text-on-surface">
+              The live test harness is ready. It bootstraps TAN mechanisms, discovers accounts,
+              fetches balances, and attempts recent transactions.
+            </p>
+          </Card>
+        </div>
+        <div className="col-span-12 md:col-span-4">
+          <Card>
+            <h3 className="text-headline-sm text-on-surface">Safe fallback</h3>
+            <p className="mt-md text-body-sm text-on-surface">
+              If DKB FinTS proves unreliable tonight, the MVP can still continue with DKB export
+              ingestion while keeping the same downstream transaction pipeline.
+            </p>
+          </Card>
+        </div>
+        <div className="col-span-12 md:col-span-4">
+          <Card>
+            <h3 className="text-headline-sm text-on-surface">Next build targets</h3>
+            <p className="mt-md text-body-sm text-on-surface">
+              After the bank test, the next implementation wave is account persistence,
+              transaction import, categories, and reporting pages.
+            </p>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 gap-gutter">
+        <div className="col-span-12 lg:col-span-7">
+          <Card>
+            <h3 className="text-headline-sm text-on-surface">Tonight&apos;s runbook</h3>
+            <pre className="mt-md bg-surface-container-low rounded-lg p-md font-mono text-body-sm text-on-surface overflow-x-auto">
 {`cd /home/pi/.hermes/hermes-agent/scratch/household-finance
 cp .env.dkb.local.example .env.dkb.local
 # fill in the real DKB values
 npm run dkb:test`}
-          </pre>
-        </article>
+            </pre>
+          </Card>
+        </div>
 
-        <article className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
-          <h3 className="text-lg font-semibold text-slate-100">Connector capabilities</h3>
-          <ul className="mt-4 space-y-3 text-sm leading-7 text-slate-300">
-            <li>• accounts: {descriptor.capabilities.listsAccounts ? "ready to attempt" : "not planned"}</li>
-            <li>• balances: {descriptor.capabilities.fetchesBalances ? "ready to attempt" : "not planned"}</li>
-            <li>• transactions: {descriptor.capabilities.fetchesTransactions ? "ready to attempt" : "not planned"}</li>
-            <li>• interactive TAN: {descriptor.capabilities.needsInteractiveTan ? "supported in spike" : "not needed"}</li>
-          </ul>
-        </article>
-      </section>
-    </FeaturePage>
+        <div className="col-span-12 lg:col-span-5">
+          <Card>
+            <h3 className="text-headline-sm text-on-surface">Connector capabilities</h3>
+            <ul className="mt-md space-y-sm text-body-sm text-on-surface">
+              <CapabilityRow
+                ready={descriptor.capabilities.listsAccounts}
+                label="accounts"
+                trueText="ready to attempt"
+                falseText="not planned"
+              />
+              <CapabilityRow
+                ready={descriptor.capabilities.fetchesBalances}
+                label="balances"
+                trueText="ready to attempt"
+                falseText="not planned"
+              />
+              <CapabilityRow
+                ready={descriptor.capabilities.fetchesTransactions}
+                label="transactions"
+                trueText="ready to attempt"
+                falseText="not planned"
+              />
+              <CapabilityRow
+                ready={descriptor.capabilities.needsInteractiveTan}
+                label="interactive TAN"
+                trueText="supported in spike"
+                falseText="not needed"
+              />
+            </ul>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function CapabilityRow({
+  ready,
+  label,
+  trueText,
+  falseText,
+}: {
+  ready: boolean;
+  label: string;
+  trueText: string;
+  falseText: string;
+}) {
+  return (
+    <li className="flex items-start gap-sm">
+      <Icon
+        name={ready ? "check_circle" : "cancel"}
+        filled={ready}
+        className={ready ? "text-secondary mt-0.5" : "text-on-surface-variant mt-0.5"}
+      />
+      <span>
+        {label}: {ready ? trueText : falseText}
+      </span>
+    </li>
   );
 }

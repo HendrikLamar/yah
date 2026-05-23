@@ -9,7 +9,7 @@ export type ParsedCsvTransaction = {
 };
 
 const HEADER_ALIASES: Record<string, string[]> = {
-  bookingDate: ["buchungstag", "booking_date", "booking date", "date"],
+  bookingDate: ["buchungstag", "buchungsdatum", "booking_date", "booking date", "date"],
   valueDate: ["wertstellung", "value_date", "value date"],
   counterpartyName: [
     "auftraggeber / begünstigter",
@@ -19,13 +19,16 @@ const HEADER_ALIASES: Record<string, string[]> = {
     "merchant",
     "name",
   ],
+  payer: ["zahlungspflichtige*r", "zahlungspflichtiger", "zahlungspflichtige"],
+  payee: ["zahlungsempfänger*in", "zahlungsempfaenger*in", "zahlungsempfänger", "zahlungsempfaenger"],
   purposeRaw: ["verwendungszweck", "purpose", "reference", "description", "memo"],
-  amount: ["betrag (eur)", "betrag", "amount", "amount_eur"],
+  amount: ["betrag (eur)", "betrag (€)", "betrag", "amount", "amount_eur"],
   currency: ["currency", "währung", "waehrung"],
 };
 
 export function parseTransactionCsv(input: string): ParsedCsvTransaction[] {
-  const trimmed = input.trim();
+  const stripped = input.replace(/^﻿/, "");
+  const trimmed = stripped.trim();
 
   if (!trimmed) {
     return [];
@@ -36,41 +39,65 @@ export function parseTransactionCsv(input: string): ParsedCsvTransaction[] {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const separator = detectSeparator(lines[0]);
-  const headerCells = splitCsvLine(lines[0], separator).map(normalizeHeader);
-  const requiredColumns = {
-    bookingDate: findColumnIndex(headerCells, "bookingDate"),
-    amount: findColumnIndex(headerCells, "amount"),
-  };
+  const headerLineIndex = findHeaderLineIndex(lines);
 
-  if (requiredColumns.bookingDate === -1 || requiredColumns.amount === -1) {
+  if (headerLineIndex === -1) {
     throw new Error("CSV file is missing required columns for booking date and amount.");
   }
 
-  const bookingDateIndex = requiredColumns.bookingDate;
-  const amountIndex = requiredColumns.amount;
+  const headerLine = lines[headerLineIndex];
+  const separator = detectSeparator(headerLine);
+  const headerCells = splitCsvLine(headerLine, separator).map(normalizeHeader);
+  const bookingDateIndex = findColumnIndex(headerCells, "bookingDate");
+  const amountIndex = findColumnIndex(headerCells, "amount");
   const valueDateIndex = findColumnIndex(headerCells, "valueDate");
   const counterpartyIndex = findColumnIndex(headerCells, "counterpartyName");
+  const payerIndex = findColumnIndex(headerCells, "payer");
+  const payeeIndex = findColumnIndex(headerCells, "payee");
   const purposeIndex = findColumnIndex(headerCells, "purposeRaw");
   const currencyIndex = findColumnIndex(headerCells, "currency");
 
-  return lines.slice(1).map((line) => {
+  return lines.slice(headerLineIndex + 1).map((line) => {
     const cells = splitCsvLine(line, separator);
-    const amount = parseAmount(cells[amountIndex] ?? "0");
+    const amount = parseAmount(cells[amountIndex] ?? "0", separator);
+    const direction: "INCOME" | "EXPENSE" = amount < 0 ? "EXPENSE" : "INCOME";
+    const directCounterparty =
+      counterpartyIndex === -1 ? null : parseOptionalText(cells[counterpartyIndex]);
+    const payer = payerIndex === -1 ? null : parseOptionalText(cells[payerIndex]);
+    const payee = payeeIndex === -1 ? null : parseOptionalText(cells[payeeIndex]);
+    const counterpartyName =
+      directCounterparty ?? (direction === "EXPENSE" ? payee : payer);
 
     return {
       bookingDate: parseDate(cells[bookingDateIndex] ?? ""),
       valueDate: valueDateIndex === -1 ? null : parseDateOrNull(cells[valueDateIndex]),
-      counterpartyName: counterpartyIndex === -1 ? null : parseOptionalText(cells[counterpartyIndex]),
+      counterpartyName,
       purposeRaw:
-        purposeIndex === -1
-          ? parseOptionalText(cells[counterpartyIndex]) ?? "Imported CSV transaction"
-          : parseOptionalText(cells[purposeIndex]) ?? "Imported CSV transaction",
+        (purposeIndex === -1
+          ? null
+          : parseOptionalText(cells[purposeIndex])) ??
+        counterpartyName ??
+        "Imported CSV transaction",
       amount,
-      direction: amount < 0 ? "EXPENSE" : "INCOME",
+      direction,
       currency: parseOptionalText(currencyIndex === -1 ? undefined : cells[currencyIndex]) ?? "EUR",
     };
   });
+}
+
+function findHeaderLineIndex(lines: string[]): number {
+  for (let index = 0; index < lines.length; index += 1) {
+    const separator = detectSeparator(lines[index]);
+    const cells = splitCsvLine(lines[index], separator).map(normalizeHeader);
+    const hasBookingDate = findColumnIndex(cells, "bookingDate") !== -1;
+    const hasAmount = findColumnIndex(cells, "amount") !== -1;
+
+    if (hasBookingDate && hasAmount) {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 function detectSeparator(headerLine: string): string {
@@ -137,14 +164,21 @@ function parseDate(value: string): string {
     return trimmed;
   }
 
-  const match = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  const fourDigitYear = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
 
-  if (!match) {
-    throw new Error(`Unsupported date format: ${value}`);
+  if (fourDigitYear) {
+    const [, day, month, year] = fourDigitYear;
+    return `${year}-${month}-${day}`;
   }
 
-  const [, day, month, year] = match;
-  return `${year}-${month}-${day}`;
+  const twoDigitYear = trimmed.match(/^(\d{2})\.(\d{2})\.(\d{2})$/);
+
+  if (twoDigitYear) {
+    const [, day, month, year] = twoDigitYear;
+    return `20${year}-${month}-${day}`;
+  }
+
+  throw new Error(`Unsupported date format: ${value}`);
 }
 
 function parseDateOrNull(value: string | undefined): string | null {
@@ -155,7 +189,7 @@ function parseDateOrNull(value: string | undefined): string | null {
   return parseDate(value);
 }
 
-function parseAmount(value: string): number {
+function parseAmount(value: string, separator?: string): number {
   const trimmed = value.trim();
   const hasComma = trimmed.includes(",");
   const hasDot = trimmed.includes(".");
@@ -166,6 +200,9 @@ function parseAmount(value: string): number {
     normalized = normalized.replace(/\./g, "").replace(/,/g, ".");
   } else if (hasComma) {
     normalized = normalized.replace(/,/g, ".");
+  } else if (hasDot && separator === ";" && /^-?\d{1,3}(?:\.\d{3})+$/.test(normalized)) {
+    // German format with thousand separator only (e.g. "1.800" = 1800)
+    normalized = normalized.replace(/\./g, "");
   }
 
   const parsed = Number(normalized);

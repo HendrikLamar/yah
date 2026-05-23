@@ -67,8 +67,10 @@ describe("importCsvTransactions", () => {
     const upsertCalls = vi.mocked(prisma.account.upsert).mock.calls;
     expect(upsertCalls).toHaveLength(2);
 
-    const firstExternalId = upsertCalls[0]?.[0].where.bankConnectionId_externalAccountId.externalAccountId;
-    const secondExternalId = upsertCalls[1]?.[0].where.bankConnectionId_externalAccountId.externalAccountId;
+    const firstExternalId =
+      upsertCalls[0]?.[0]?.where.bankConnectionId_externalAccountId?.externalAccountId;
+    const secondExternalId =
+      upsertCalls[1]?.[0]?.where.bankConnectionId_externalAccountId?.externalAccountId;
 
     expect(firstExternalId).not.toBe(secondExternalId);
     expect(firstExternalId).toContain("user-a");

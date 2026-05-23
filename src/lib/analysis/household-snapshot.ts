@@ -1,4 +1,5 @@
 export type SnapshotTransaction = {
+  id: string;
   bookingDate: Date;
   amount: number;
   direction: "INCOME" | "EXPENSE";

@@ -15,14 +15,20 @@ export async function uploadCsvAction(formData: FormData) {
   }
 
   const context = await getViewerHouseholdContext();
+
+  if (!context.viewer) {
+    redirect("/settings?error=Bitte+einloggen");
+  }
+
   const text = await file.text();
   const parsed = parseTransactionCsv(text);
   const result = await importCsvTransactions({
     householdId: context.householdId,
     accountName,
     transactions: parsed,
-    ownerUserId: context.viewer?.userId ?? null,
-    userId: context.viewer?.userId ?? "anonymous-import",
+    ownerUserId: context.viewer.userId,
+    responsibilityType: "USER",
+    userId: context.viewer.userId,
     sourceFileName: file instanceof File ? file.name : undefined,
   });
 

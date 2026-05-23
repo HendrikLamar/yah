@@ -7,6 +7,7 @@ describe("buildHouseholdSnapshot", () => {
     const snapshot = buildHouseholdSnapshot(
       [
         {
+          id: "txn-1",
           bookingDate: new Date("2026-05-02"),
           amount: 3200,
           direction: "INCOME",
@@ -17,6 +18,7 @@ describe("buildHouseholdSnapshot", () => {
           counterpartyName: "Employer",
         },
         {
+          id: "txn-2",
           bookingDate: new Date("2026-05-03"),
           amount: -80,
           direction: "EXPENSE",
@@ -27,6 +29,7 @@ describe("buildHouseholdSnapshot", () => {
           counterpartyName: "REWE",
         },
         {
+          id: "txn-3",
           bookingDate: new Date("2026-05-04"),
           amount: -45,
           direction: "EXPENSE",
@@ -37,6 +40,7 @@ describe("buildHouseholdSnapshot", () => {
           counterpartyName: "Thalia",
         },
         {
+          id: "txn-old",
           bookingDate: new Date("2026-04-20"),
           amount: -999,
           direction: "EXPENSE",

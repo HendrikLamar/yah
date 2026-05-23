@@ -1,3 +1,3 @@
-export function shouldSeedDemoData(env: NodeJS.ProcessEnv): boolean {
+export function shouldSeedDemoData(env: Record<string, string | undefined>): boolean {
   return env.ENABLE_DEMO_DATA === "true";
 }
