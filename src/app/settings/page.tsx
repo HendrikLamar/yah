@@ -1,10 +1,14 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { PageHeader } from "@/components/ui/page-header";
 import { getCurrentViewer } from "@/lib/auth/session";
+import { prisma } from "@/lib/db/prisma";
+import { statusFor } from "@/lib/sharing/invitations";
 
+import { revokeInvitationAction } from "../accounts/actions";
 import { loginAction, logoutAction, registerAction } from "./actions";
 
 type SettingsPageProps = {
@@ -16,6 +20,15 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const error = firstValue(resolvedSearchParams.error);
   const auth = firstValue(resolvedSearchParams.auth);
+  const invite = firstValue(resolvedSearchParams.invite);
+
+  const invitations = viewer?.householdId
+    ? await prisma.invitation.findMany({
+        where: { householdId: viewer.householdId },
+        include: { acceptedByUser: { select: { displayName: true, email: true } } },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
 
   return (
     <>
@@ -87,6 +100,65 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
           </Card>
         </div>
       </div>
+
+      {viewer ? (
+        <Card className="mb-lg">
+          <h3 className="text-headline-sm text-on-surface mb-md">Einladungen</h3>
+          {invite === "revoked" ? (
+            <div className="mb-md">
+              <Badge variant="success" icon="check_circle">Einladung widerrufen.</Badge>
+            </div>
+          ) : null}
+          {invitations.length === 0 ? (
+            <p className="text-body-sm text-on-surface-variant">
+              Noch keine Einladungen für diesen Haushalt. Einladungen werden auf einer
+              Konto-Detail-Seite erstellt.
+            </p>
+          ) : (
+            <DataTable
+              columns={[
+                {
+                  key: "status",
+                  header: "Status",
+                  render: (i) => statusBadge(statusFor(i)),
+                },
+                {
+                  key: "createdAt",
+                  header: "Erstellt",
+                  render: (i) => i.createdAt.toISOString().slice(0, 10),
+                },
+                {
+                  key: "expiresAt",
+                  header: "Gültig bis",
+                  render: (i) => i.expiresAt.toISOString().slice(0, 10),
+                },
+                {
+                  key: "accepted",
+                  header: "Angenommen von",
+                  render: (i) => i.acceptedByUser?.displayName ?? "—",
+                },
+                {
+                  key: "actions",
+                  header: "",
+                  align: "right",
+                  render: (i) =>
+                    statusFor(i) === "active" ? (
+                      <form action={revokeInvitationAction}>
+                        <input type="hidden" name="invitationId" value={i.id} />
+                        <Button variant="ghost" size="sm" type="submit">
+                          widerrufen
+                        </Button>
+                      </form>
+                    ) : null,
+                },
+              ]}
+              rows={invitations}
+              getRowKey={(i) => i.id}
+              emptyState="Noch keine Einladungen."
+            />
+          )}
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-12 gap-gutter">
         <div className="col-span-12 lg:col-span-6">
@@ -160,6 +232,19 @@ function IconInput({ icon, label, name, type = "text", required, minLength }: Ic
 
 function firstValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function statusBadge(status: "active" | "accepted" | "revoked" | "expired") {
+  switch (status) {
+    case "active":
+      return <Badge variant="success" icon="check_circle">aktiv</Badge>;
+    case "accepted":
+      return <Badge variant="info">angenommen</Badge>;
+    case "revoked":
+      return <Badge variant="error" icon="cancel">widerrufen</Badge>;
+    case "expired":
+      return <Badge variant="neutral" icon="cancel">abgelaufen</Badge>;
+  }
 }
 
 function authMessage(auth: string): string {

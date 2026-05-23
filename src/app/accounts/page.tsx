@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,6 +21,7 @@ type AccountRow = {
   transactionCount: number;
   earliestBookingDate: Date | null;
   latestBookingDate: Date | null;
+  shareCount: number;
 };
 
 const ACCOUNT_TYPE_LABEL: Record<AccountRow["accountType"], string> = {
@@ -46,7 +48,7 @@ export default async function AccountsPage() {
     include: {
       bankConnection: { select: { provider: true } },
       visibilityOwnerUser: { select: { displayName: true } },
-      _count: { select: { transactions: true } },
+      _count: { select: { transactions: true, shares: true } },
     },
     orderBy: [{ visibilityOwnerType: "asc" }, { name: "asc" }],
   });
@@ -78,6 +80,7 @@ export default async function AccountsPage() {
       transactionCount: account._count.transactions,
       earliestBookingDate: range?._min.bookingDate ?? null,
       latestBookingDate: range?._max.bookingDate ?? null,
+      shareCount: account._count.shares,
     };
   });
 
@@ -143,6 +146,27 @@ export default async function AccountsPage() {
                 account.earliestBookingDate && account.latestBookingDate
                   ? formatDateRange(account.earliestBookingDate, account.latestBookingDate)
                   : "—",
+            },
+            {
+              key: "shared",
+              header: "Geteilt mit",
+              render: (account) =>
+                account.shareCount > 0 ? `${account.shareCount} Person(en)` : "—",
+            },
+            {
+              key: "manage",
+              header: "",
+              align: "right",
+              render: (account) => (
+                <Button
+                  as="link"
+                  href={`/accounts/${account.id}/access`}
+                  variant="ghost"
+                  size="sm"
+                >
+                  Zugriff verwalten
+                </Button>
+              ),
             },
           ]}
           rows={rows}
