@@ -3,6 +3,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { buildHouseholdSnapshot } from "@/lib/analysis/household-snapshot";
+import {
+  aggregateCashflowByPeriod,
+  aggregateTopCounterparties,
+  defaultRange,
+  parseGranularity,
+  parseRange,
+  type AnalysisTransaction,
+} from "@/lib/analysis/timeseries";
 import { prisma } from "@/lib/db/prisma";
 import { formatCurrency, formatIsoDate } from "@/lib/format";
 import {
@@ -11,8 +19,17 @@ import {
   getViewerHouseholdContext,
 } from "@/lib/household/viewer";
 
-export default async function DashboardPage() {
+import { CashflowChart } from "./cashflow-chart";
+import { CounterpartiesChart } from "./counterparties-chart";
+import { TimeRangePicker } from "./time-range-picker";
+
+type DashboardPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const context = await getViewerHouseholdContext();
+  const resolved = searchParams ? await searchParams : {};
 
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -20,18 +37,17 @@ export default async function DashboardPage() {
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999),
   );
 
-  const [accounts, monthTransactions] = await Promise.all([
+  const range = parseRange(firstValue(resolved.from), firstValue(resolved.to), now);
+  const granularity = parseGranularity(firstValue(resolved.granularity));
+
+  const [accounts, monthTransactions, rangeTransactions] = await Promise.all([
     prisma.account.findMany({
       where: {
         householdId: context.householdId,
         isActive: true,
         ...buildAccountVisibilityFilter(context.viewer),
       },
-      select: {
-        id: true,
-        name: true,
-        visibilityOwnerType: true,
-      },
+      select: { id: true, name: true, visibilityOwnerType: true },
       orderBy: { name: "asc" },
     }),
     prisma.transaction.findMany({
@@ -53,7 +69,33 @@ export default async function DashboardPage() {
       },
       orderBy: { bookingDate: "desc" },
     }),
+    prisma.transaction.findMany({
+      where: {
+        householdId: context.householdId,
+        bookingDate: { gte: range.from, lte: range.to },
+        ...buildTransactionAccountVisibilityFilter(context.viewer),
+      },
+      select: {
+        bookingDate: true,
+        amount: true,
+        direction: true,
+        counterpartyName: true,
+        isInternalTransfer: true,
+      },
+      orderBy: { bookingDate: "asc" },
+    }),
   ]);
+
+  const analysisTransactions: AnalysisTransaction[] = rangeTransactions.map((t) => ({
+    bookingDate: t.bookingDate,
+    amount: Number(t.amount),
+    direction: t.direction,
+    counterpartyName: t.counterpartyName,
+    isInternalTransfer: t.isInternalTransfer,
+  }));
+
+  const cashflow = aggregateCashflowByPeriod(analysisTransactions, granularity);
+  const topCounterparties = aggregateTopCounterparties(analysisTransactions, 10);
 
   const snapshot = buildHouseholdSnapshot(
     monthTransactions.map((transaction) => ({
@@ -72,6 +114,12 @@ export default async function DashboardPage() {
   const totalExpenses = snapshot.sharedExpenses + snapshot.personalExpenses;
   const sharedPercent =
     totalExpenses > 0 ? Math.round((snapshot.sharedExpenses / totalExpenses) * 100) : 0;
+
+  const fallback = defaultRange(now);
+  const rangeLabel = `${formatIsoDate(range.from)} → ${formatIsoDate(range.to)}`;
+  const usingDefaultRange =
+    range.from.getTime() === fallback.from.getTime() &&
+    range.to.getTime() === fallback.to.getTime();
 
   return (
     <>
@@ -118,39 +166,26 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-gutter mb-lg">
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-md mb-md">
+          <div>
+            <h3 className="text-headline-sm text-on-surface">Cashflow über Zeit</h3>
+            <p className="text-body-sm text-on-surface-variant">
+              {usingDefaultRange ? "Letzte 12 Monate (Standard)" : rangeLabel}
+            </p>
+          </div>
+          <TimeRangePicker />
+        </div>
+        <CashflowChart data={cashflow} />
+      </Card>
+
+      <div className="grid grid-cols-12 gap-gutter my-lg">
         <div className="col-span-12 xl:col-span-7">
           <Card>
-            <h3 className="text-headline-sm text-on-surface">How spending is split</h3>
-            <div className="mt-md grid gap-md md:grid-cols-2">
-              <SplitPanel
-                title="Shared household expenses"
-                value={formatCurrency(snapshot.sharedExpenses)}
-                detail="Common groceries, rent, utilities, eating out and other shared costs."
-              />
-              <SplitPanel
-                title="Personal expenses"
-                value={formatCurrency(snapshot.personalExpenses)}
-                detail="Private spend assigned to the signed-in user or demo personal accounts."
-              />
-            </div>
-
-            <h4 className="mt-lg text-label-md text-secondary uppercase tracking-wider">
-              Top expense categories this month
-            </h4>
-            <ul className="mt-md space-y-sm">
-              {snapshot.topCategories.map((category) => (
-                <li
-                  key={category.name}
-                  className="flex items-center justify-between bg-surface-container-low rounded-lg px-md py-sm text-body-sm"
-                >
-                  <span className="text-on-surface">{category.name}</span>
-                  <strong className="text-on-surface tabular-nums">
-                    {formatCurrency(category.amount)}
-                  </strong>
-                </li>
-              ))}
-            </ul>
+            <h3 className="text-headline-sm text-on-surface mb-md">
+              Top-Empfänger im Zeitraum
+            </h3>
+            <CounterpartiesChart data={topCounterparties} />
           </Card>
         </div>
 
@@ -216,20 +251,6 @@ export default async function DashboardPage() {
   );
 }
 
-function SplitPanel({
-  title,
-  value,
-  detail,
-}: {
-  title: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <div className="bg-surface-container-low rounded-lg p-md">
-      <p className="text-body-sm text-on-surface-variant">{title}</p>
-      <p className="mt-xs text-headline-sm text-on-surface tabular-nums">{value}</p>
-      <p className="mt-sm text-body-sm text-on-surface-variant">{detail}</p>
-    </div>
-  );
+function firstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
