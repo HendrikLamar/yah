@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { Icon } from "@/components/ui/icon";
@@ -7,11 +6,17 @@ import { PageHeader } from "@/components/ui/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { formatCurrency, formatIsoDate } from "@/lib/format";
 import {
+  buildAccountVisibilityFilter,
   buildTransactionAccountVisibilityFilter,
   getViewerHouseholdContext,
 } from "@/lib/household/viewer";
 
-import { uploadCsvAction } from "./actions";
+import { CsvUploadForm, type AccountOption } from "./csv-upload-form";
+
+const PROVIDER_LABEL: Record<"DKB" | "CSV_UPLOAD", string> = {
+  DKB: "DKB",
+  CSV_UPLOAD: "CSV",
+};
 
 type TransactionsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -25,25 +30,55 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
   const account = firstValue(resolvedSearchParams.account);
   const error = firstValue(resolvedSearchParams.error);
 
-  const transactions = await prisma.transaction.findMany({
-    where: {
-      householdId: context.householdId,
-      ...buildTransactionAccountVisibilityFilter(context.viewer),
-    },
-    select: {
-      id: true,
-      bookingDate: true,
-      amount: true,
-      purposeRaw: true,
-      counterpartyName: true,
-      responsibilityType: true,
-      account: { select: { name: true } },
-      category: { select: { name: true } },
-      responsibilityUser: { select: { displayName: true } },
-    },
-    orderBy: { bookingDate: "desc" },
-    take: 20,
+  const [transactions, accounts] = await Promise.all([
+    prisma.transaction.findMany({
+      where: {
+        householdId: context.householdId,
+        ...buildTransactionAccountVisibilityFilter(context.viewer),
+      },
+      select: {
+        id: true,
+        bookingDate: true,
+        amount: true,
+        purposeRaw: true,
+        counterpartyName: true,
+        responsibilityType: true,
+        account: { select: { name: true } },
+        category: { select: { name: true } },
+        responsibilityUser: { select: { displayName: true } },
+      },
+      orderBy: { bookingDate: "desc" },
+      take: 20,
+    }),
+    prisma.account.findMany({
+      where: {
+        householdId: context.householdId,
+        isActive: true,
+        ...buildAccountVisibilityFilter(context.viewer),
+      },
+      select: {
+        id: true,
+        name: true,
+        ibanLast4: true,
+        bankConnection: { select: { provider: true } },
+      },
+      orderBy: [{ visibilityOwnerType: "asc" }, { name: "asc" }],
+    }),
+  ]);
+
+  const accountOptions: AccountOption[] = accounts.map((account) => {
+    const provider = account.bankConnection.provider as keyof typeof PROVIDER_LABEL;
+    const providerLabel = PROVIDER_LABEL[provider] ?? account.bankConnection.provider;
+    const ibanSuffix = account.ibanLast4 ? ` · ····${account.ibanLast4}` : "";
+    return {
+      id: account.id,
+      label: `${account.name} · ${providerLabel}${ibanSuffix}`,
+    };
   });
+
+  const defaultNewAccountName = context.viewer
+    ? `${context.viewer.displayName} CSV Import`
+    : "CSV Import";
 
   return (
     <>
@@ -69,46 +104,10 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
               <code>Verwendungszweck</code> and <code>Betrag (EUR)</code>.
             </p>
 
-            <form action={uploadCsvAction} className="mt-md space-y-md">
-              <label className="block text-body-sm text-on-surface">
-                Account name for this import
-                <div className="mt-xs relative">
-                  <Icon
-                    name="badge"
-                    className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"
-                  />
-                  <input
-                    className="w-full pl-[48px] pr-md py-md bg-surface border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all outline-none text-body-md text-on-surface"
-                    defaultValue={
-                      context.viewer ? `${context.viewer.displayName} CSV Import` : "CSV Import"
-                    }
-                    name="accountName"
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="block text-body-sm text-on-surface">
-                CSV file
-                <div className="mt-xs relative">
-                  <Icon
-                    name="upload_file"
-                    className="absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"
-                  />
-                  <input
-                    accept=".csv,text/csv"
-                    className="block w-full pl-[48px] pr-md py-md bg-surface border border-outline-variant rounded-lg text-body-md text-on-surface file:mr-md file:rounded-lg file:border-0 file:bg-surface-container-high file:px-md file:py-xs file:text-label-md file:text-on-surface"
-                    name="csvFile"
-                    required
-                    type="file"
-                  />
-                </div>
-              </label>
-
-              <Button variant="secondary" icon="upload" type="submit">
-                Parse and import CSV
-              </Button>
-            </form>
+            <CsvUploadForm
+              accounts={accountOptions}
+              defaultNewAccountName={defaultNewAccountName}
+            />
 
             {error ? (
               <div className="mt-md">

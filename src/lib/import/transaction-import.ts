@@ -5,13 +5,22 @@ import type { ParsedCsvTransaction } from "@/lib/import/csv";
 
 export async function importCsvTransactions(options: {
   householdId: string;
-  accountName: string;
+  accountId?: string;
+  accountName?: string;
   transactions: ParsedCsvTransaction[];
   ownerUserId?: string | null;
   responsibilityType?: "SHARED" | "USER";
   userId: string;
   sourceFileName?: string;
 }) {
+  if (!options.accountId && !options.accountName) {
+    throw new Error("Either accountId or accountName must be provided.");
+  }
+
+  if (options.accountId && options.accountName) {
+    throw new Error("Provide either accountId or accountName, not both.");
+  }
+
   const fallbackCategory = await prisma.category.findUnique({
     where: {
       householdId_slug: {
@@ -25,54 +34,11 @@ export async function importCsvTransactions(options: {
     throw new Error("Missing uncategorized category in household.");
   }
 
-  const visibilityOwnerType: "SHARED" | "USER" = options.ownerUserId ? "USER" : "SHARED";
   const responsibilityType = options.responsibilityType ?? "SHARED";
 
-  const connection = await prisma.bankConnection.upsert({
-    where: {
-      id: `csv-upload-${options.householdId}`,
-    },
-    update: {
-      householdId: options.householdId,
-      provider: "CSV_UPLOAD",
-      status: "ACTIVE",
-      lastErrorMessage: null,
-    },
-    create: {
-      id: `csv-upload-${options.householdId}`,
-      householdId: options.householdId,
-      provider: "CSV_UPLOAD",
-      status: "ACTIVE",
-    },
-  });
-
-  const externalAccountId = buildCsvExternalAccountId(options.accountName, options.ownerUserId);
-
-  const account = await prisma.account.upsert({
-    where: {
-      bankConnectionId_externalAccountId: {
-        bankConnectionId: connection.id,
-        externalAccountId,
-      },
-    },
-    update: {
-      householdId: options.householdId,
-      name: options.accountName,
-      visibilityOwnerType,
-      visibilityOwnerUserId: options.ownerUserId ?? null,
-      accountType: "CHECKING",
-      isActive: true,
-    },
-    create: {
-      householdId: options.householdId,
-      bankConnectionId: connection.id,
-      externalAccountId,
-      name: options.accountName,
-      visibilityOwnerType,
-      visibilityOwnerUserId: options.ownerUserId ?? null,
-      accountType: "CHECKING",
-    },
-  });
+  const account = options.accountId
+    ? await resolveExistingAccount(options.householdId, options.accountId)
+    : await upsertCsvAccount(options.householdId, options.accountName!, options.ownerUserId ?? null);
 
   const data = options.transactions.map((transaction) => ({
     householdId: options.householdId,
@@ -102,7 +68,7 @@ export async function importCsvTransactions(options: {
       userId: options.userId,
       sourceFileName: options.sourceFileName ?? null,
       sourceFormat: "CSV",
-      accountName: options.accountName,
+      accountName: account.name,
       totalRows: options.transactions.length,
       importedCount: result.count,
       skippedCount: options.transactions.length - result.count,
@@ -127,6 +93,71 @@ export async function importCsvTransactions(options: {
     skippedCount: options.transactions.length - result.count,
     importBatchId: batch.id,
   };
+}
+
+async function resolveExistingAccount(householdId: string, accountId: string) {
+  const account = await prisma.account.findFirst({
+    where: { id: accountId, householdId },
+    select: { id: true, name: true },
+  });
+
+  if (!account) {
+    throw new Error("Account not found in this household.");
+  }
+
+  return account;
+}
+
+async function upsertCsvAccount(
+  householdId: string,
+  accountName: string,
+  ownerUserId: string | null,
+) {
+  const visibilityOwnerType: "SHARED" | "USER" = ownerUserId ? "USER" : "SHARED";
+
+  const connection = await prisma.bankConnection.upsert({
+    where: { id: `csv-upload-${householdId}` },
+    update: {
+      householdId,
+      provider: "CSV_UPLOAD",
+      status: "ACTIVE",
+      lastErrorMessage: null,
+    },
+    create: {
+      id: `csv-upload-${householdId}`,
+      householdId,
+      provider: "CSV_UPLOAD",
+      status: "ACTIVE",
+    },
+  });
+
+  const externalAccountId = buildCsvExternalAccountId(accountName, ownerUserId);
+
+  return prisma.account.upsert({
+    where: {
+      bankConnectionId_externalAccountId: {
+        bankConnectionId: connection.id,
+        externalAccountId,
+      },
+    },
+    update: {
+      householdId,
+      name: accountName,
+      visibilityOwnerType,
+      visibilityOwnerUserId: ownerUserId,
+      accountType: "CHECKING",
+      isActive: true,
+    },
+    create: {
+      householdId,
+      bankConnectionId: connection.id,
+      externalAccountId,
+      name: accountName,
+      visibilityOwnerType,
+      visibilityOwnerUserId: ownerUserId,
+      accountType: "CHECKING",
+    },
+  });
 }
 
 function slugify(value: string): string {
