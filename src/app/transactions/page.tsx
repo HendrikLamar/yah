@@ -67,7 +67,8 @@ export default async function TransactionsPage({ searchParams }: TransactionsPag
   ]);
 
   const accountOptions: AccountOption[] = accounts.map((account) => {
-    const providerLabel = PROVIDER_LABEL[account.bankConnection.provider];
+    const provider = account.bankConnection.provider as keyof typeof PROVIDER_LABEL;
+    const providerLabel = PROVIDER_LABEL[provider] ?? account.bankConnection.provider;
     const ibanSuffix = account.ibanLast4 ? ` · ····${account.ibanLast4}` : "";
     return {
       id: account.id,
