@@ -101,6 +101,6 @@ export async function uploadCsvAction(formData: FormData) {
   }
 
   redirect(
-    `/transactions?imported=${result.importedCount}&skipped=${result.skippedCount}&account=${encodeURIComponent(result.accountName)}`,
+    `/transactions?imported=${result.importedCount}&skipped=${result.skippedCount}&imported_account=${encodeURIComponent(result.accountName)}`,
   );
 }
