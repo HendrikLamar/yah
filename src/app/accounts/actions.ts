@@ -5,10 +5,7 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db/prisma";
 import { getViewerHouseholdContext } from "@/lib/household/viewer";
-import {
-  generateInvitationToken,
-  hashInvitationToken,
-} from "@/lib/sharing/invitations";
+import { generateInvitationToken } from "@/lib/sharing/invitations";
 
 const INVITE_TOKEN_COOKIE = "yah_invite_token";
 
@@ -139,9 +136,4 @@ export async function revokeInvitationAction(formData: FormData) {
   });
 
   redirect("/settings?invite=revoked");
-}
-
-// Re-export the same helper for the hash check (used by /invite/accept page)
-export function _tokenHash(token: string) {
-  return hashInvitationToken(token);
 }
