@@ -90,6 +90,9 @@ function optionalIsoDate(value: unknown): string | null {
   return value;
 }
 
+const MAX_FALLBACK_FILE_BYTES = 10 * 1024 * 1024;
+const FALLBACK_TIMEOUT_MS = 30_000;
+
 export async function callAnthropicVisionFallback(
   input: InvoiceFallbackInput,
   env: NodeJS.ProcessEnv = process.env,
@@ -98,10 +101,30 @@ export async function callAnthropicVisionFallback(
     throw new Error("Invoice AI fallback is not configured.");
   }
 
+  if (input.buffer.byteLength > MAX_FALLBACK_FILE_BYTES) {
+    throw new Error("File too large for AI fallback.");
+  }
+
   const model = env.INVOICE_AI_FALLBACK_MODEL ?? "claude-haiku-4-5-20251001";
   const apiKey = env.ANTHROPIC_API_KEY as string;
 
-  const dataUri = `data:${input.mimeType};base64,${input.buffer.toString("base64")}`;
+  const mimeType = input.mimeType.toLowerCase();
+  const isPdf = mimeType.includes("pdf");
+  const isImage = mimeType.startsWith("image/");
+  if (!isPdf && !isImage) {
+    throw new Error(`Unsupported mime type for AI fallback: ${input.mimeType}`);
+  }
+
+  const base64 = input.buffer.toString("base64");
+  const mediaBlock = isPdf
+    ? {
+        type: "document" as const,
+        source: { type: "base64" as const, media_type: "application/pdf", data: base64 },
+      }
+    : {
+        type: "image" as const,
+        source: { type: "base64" as const, media_type: input.mimeType, data: base64 },
+      };
 
   const body = {
     model,
@@ -110,10 +133,7 @@ export async function callAnthropicVisionFallback(
       {
         role: "user",
         content: [
-          {
-            type: "document",
-            source: { type: "url", url: dataUri },
-          },
+          mediaBlock,
           {
             type: "text",
             text: `Extract invoice metadata from this document. Respond with ONLY a JSON object (no prose, no code fence) matching this shape:
@@ -140,6 +160,7 @@ Use null when a field is not present. Numbers must be plain decimals (no currenc
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
   });
 
   if (!response.ok) {

@@ -149,7 +149,8 @@ export async function extractInvoiceMetadataFromFile(
         fallbackModel: fallback.model,
       };
     } catch (error) {
-      console.error("[invoice-extraction] AI fallback failed", error);
+      const message = error instanceof Error ? error.message : "unknown error";
+      console.error("[invoice-extraction] AI fallback failed:", message);
       return baseResult;
     }
   }
