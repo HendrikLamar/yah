@@ -175,7 +175,7 @@ export async function applyRulesToHousehold(options: {
     id: rule.id,
     name: rule.name,
     priority: rule.priority,
-    isEnabled: true,
+    isEnabled: rule.isEnabled,
     matchField: rule.matchField,
     matchOperator: rule.matchOperator,
     matchValue: rule.matchValue,
@@ -197,7 +197,11 @@ export async function applyRulesToHousehold(options: {
       })
     : null;
 
-  const where = options.onlyUncategorized && uncategorized
+  if (options.onlyUncategorized && !uncategorized) {
+    return { matched: 0, updated: 0 };
+  }
+
+  const where = uncategorized
     ? { householdId: options.householdId, categoryId: uncategorized.id }
     : { householdId: options.householdId };
 
