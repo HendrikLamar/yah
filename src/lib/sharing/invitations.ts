@@ -33,16 +33,34 @@ export async function acceptInvitation(options: {
 }): Promise<{ householdId: string; appliedShareCount: number }> {
   const now = options.now ?? new Date();
 
+  const claim = await prisma.invitation.updateMany({
+    where: {
+      tokenHash: options.tokenHash,
+      acceptedAt: null,
+      revokedAt: null,
+      expiresAt: { gt: now },
+    },
+    data: { acceptedAt: now, acceptedByUserId: options.userId },
+  });
+
+  if (claim.count === 0) {
+    const existing = await prisma.invitation.findUnique({
+      where: { tokenHash: options.tokenHash },
+      select: { revokedAt: true, acceptedAt: true, expiresAt: true },
+    });
+    if (!existing) throw new Error("Einladung nicht gefunden.");
+    if (existing.revokedAt) throw new Error("Einladung wurde widerrufen.");
+    if (existing.acceptedAt) throw new Error("Einladung wurde bereits angenommen.");
+    if (existing.expiresAt.getTime() < now.getTime()) {
+      throw new Error("Einladung ist abgelaufen.");
+    }
+    throw new Error("Einladung konnte nicht angenommen werden.");
+  }
+
   const invitation = await prisma.invitation.findUnique({
     where: { tokenHash: options.tokenHash },
   });
-
   if (!invitation) throw new Error("Einladung nicht gefunden.");
-  if (invitation.revokedAt) throw new Error("Einladung wurde widerrufen.");
-  if (invitation.acceptedAt) throw new Error("Einladung wurde bereits angenommen.");
-  if (invitation.expiresAt.getTime() < now.getTime()) {
-    throw new Error("Einladung ist abgelaufen.");
-  }
 
   await prisma.householdMember.upsert({
     where: {
@@ -86,14 +104,6 @@ export async function acceptInvitation(options: {
     });
     appliedShareCount += 1;
   }
-
-  await prisma.invitation.update({
-    where: { id: invitation.id },
-    data: {
-      acceptedAt: now,
-      acceptedByUserId: options.userId,
-    },
-  });
 
   return { householdId: invitation.householdId, appliedShareCount };
 }

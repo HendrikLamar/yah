@@ -112,6 +112,16 @@ export async function createSession(userId: string) {
   });
 }
 
+export async function setActiveHouseholdForCurrentSession(householdId: string): Promise<void> {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!sessionToken) return;
+  await prisma.userSession.updateMany({
+    where: { tokenHash: hashSessionToken(sessionToken) },
+    data: { activeHouseholdId: householdId },
+  });
+}
+
 export async function destroyCurrentSession() {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;

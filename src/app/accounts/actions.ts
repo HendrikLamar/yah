@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db/prisma";
@@ -8,6 +9,8 @@ import {
   generateInvitationToken,
   hashInvitationToken,
 } from "@/lib/sharing/invitations";
+
+const INVITE_TOKEN_COOKIE = "yah_invite_token";
 
 function redirectAccounts(query: Record<string, string>): never {
   const params = new URLSearchParams(query);
@@ -105,7 +108,16 @@ export async function createShareableInviteAction(formData: FormData) {
     },
   });
 
-  redirectAccounts({ inviteToken: token });
+  const cookieStore = await cookies();
+  cookieStore.set(INVITE_TOKEN_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 120,
+  });
+
+  redirect(`/accounts/${accountId}/access?inviteCreated=1`);
 }
 
 export async function revokeInvitationAction(formData: FormData) {

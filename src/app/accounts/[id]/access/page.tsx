@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { getViewerHouseholdContext } from "@/lib/household/viewer";
+
+const INVITE_TOKEN_COOKIE = "yah_invite_token";
 
 import {
   createShareableInviteAction,
@@ -25,8 +28,12 @@ export default async function AccessPage({ params, searchParams }: AccessPagePro
   const context = await getViewerHouseholdContext();
   const resolvedParams = await params;
   const resolved = searchParams ? await searchParams : {};
-  const inviteToken = firstValue(resolved.inviteToken);
+  const inviteCreated = firstValue(resolved.inviteCreated) === "1";
   const error = firstValue(resolved.error);
+  const cookieStore = await cookies();
+  const inviteToken = inviteCreated
+    ? cookieStore.get(INVITE_TOKEN_COOKIE)?.value ?? null
+    : null;
 
   const account = await prisma.account.findFirst({
     where: { id: resolvedParams.id, householdId: context.householdId },
