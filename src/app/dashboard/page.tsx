@@ -4,7 +4,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { buildHouseholdSnapshot } from "@/lib/analysis/household-snapshot";
 import { prisma } from "@/lib/db/prisma";
-import { formatCurrency, formatIsoDate } from "@/lib/format";
+import { formatCurrency, formatDateRange, formatIsoDate } from "@/lib/format";
 import {
   buildAccountVisibilityFilter,
   buildTransactionAccountVisibilityFilter,
@@ -48,6 +48,7 @@ export default async function DashboardPage() {
         responsibilityType: true,
         purposeRaw: true,
         counterpartyName: true,
+        isInternalTransfer: true,
         account: { select: { name: true } },
         category: { select: { name: true } },
       },
@@ -66,8 +67,15 @@ export default async function DashboardPage() {
       accountName: transaction.account.name,
       purposeRaw: transaction.purposeRaw,
       counterpartyName: transaction.counterpartyName,
+      isInternalTransfer: transaction.isInternalTransfer,
     })),
+    now,
   );
+
+  const monthRangeLabel = formatDateRange(snapshot.monthRangeStart, snapshot.monthRangeEnd);
+  const partialMonthHint = snapshot.isPartialMonth
+    ? `Partial month — ${monthRangeLabel}`
+    : monthRangeLabel;
 
   const totalExpenses = snapshot.sharedExpenses + snapshot.personalExpenses;
   const sharedPercent =
@@ -89,7 +97,12 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-12 gap-gutter mb-lg">
         <div className="col-span-12 md:col-span-6">
-          <MetricCard hero label="Net this month" value={formatCurrency(snapshot.monthNet)} />
+          <MetricCard
+            hero
+            label="Net this month"
+            value={formatCurrency(snapshot.monthNet)}
+            helper={partialMonthHint}
+          />
         </div>
         <div className="col-span-12 md:col-span-6">
           <Card padding="xl">
@@ -107,13 +120,28 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-12 gap-gutter mb-lg">
-        <div className="col-span-12 md:col-span-4">
-          <MetricCard label="Income this month" value={formatCurrency(snapshot.monthIncome)} />
+        <div className="col-span-12 md:col-span-3">
+          <MetricCard
+            label="Income this month"
+            value={formatCurrency(snapshot.monthIncome)}
+            helper={monthRangeLabel}
+          />
         </div>
-        <div className="col-span-12 md:col-span-4">
-          <MetricCard label="Expenses this month" value={formatCurrency(snapshot.monthExpenses)} />
+        <div className="col-span-12 md:col-span-3">
+          <MetricCard
+            label="Expenses this month"
+            value={formatCurrency(snapshot.monthExpenses)}
+            helper={monthRangeLabel}
+          />
         </div>
-        <div className="col-span-12 md:col-span-4">
+        <div className="col-span-12 md:col-span-3">
+          <MetricCard
+            label="Moved between own accounts"
+            value={formatCurrency(snapshot.transferVolume)}
+            helper="Excluded from income/expense"
+          />
+        </div>
+        <div className="col-span-12 md:col-span-3">
           <MetricCard label="Uncategorized" value={String(snapshot.uncategorizedCount)} />
         </div>
       </div>

@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 
+import {
+  applyRulesToTransaction,
+  fetchHouseholdRules,
+} from "@/lib/categorization/rule-engine";
 import { prisma } from "@/lib/db/prisma";
 import type { ParsedCsvTransaction } from "@/lib/import/csv";
 
@@ -40,21 +44,35 @@ export async function importCsvTransactions(options: {
     ? await resolveExistingAccount(options.householdId, options.accountId)
     : await upsertCsvAccount(options.householdId, options.accountName!, options.ownerUserId ?? null);
 
-  const data = options.transactions.map((transaction) => ({
-    householdId: options.householdId,
-    accountId: account.id,
-    bookingDate: new Date(`${transaction.bookingDate}T00:00:00.000Z`),
-    valueDate: transaction.valueDate ? new Date(`${transaction.valueDate}T00:00:00.000Z`) : null,
-    amount: transaction.amount,
-    currency: transaction.currency,
-    direction: transaction.direction,
-    counterpartyName: transaction.counterpartyName,
-    purposeRaw: transaction.purposeRaw,
-    categoryId: fallbackCategory.id,
-    responsibilityType,
-    responsibilityUserId: options.ownerUserId ?? null,
-    importHash: buildImportHash(account.id, transaction),
-  }));
+  const rules = await fetchHouseholdRules(options.householdId);
+
+  const data = options.transactions.map((transaction) => {
+    const outcome = applyRulesToTransaction(rules, {
+      purposeRaw: transaction.purposeRaw,
+      counterpartyName: transaction.counterpartyName,
+      normalizedMerchant: null,
+      amount: transaction.amount,
+      direction: transaction.direction,
+      accountId: account.id,
+    });
+
+    return {
+      householdId: options.householdId,
+      accountId: account.id,
+      bookingDate: new Date(`${transaction.bookingDate}T00:00:00.000Z`),
+      valueDate: transaction.valueDate ? new Date(`${transaction.valueDate}T00:00:00.000Z`) : null,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      direction: transaction.direction,
+      counterpartyName: transaction.counterpartyName,
+      purposeRaw: transaction.purposeRaw,
+      categoryId: outcome.categoryId ?? fallbackCategory.id,
+      responsibilityType: outcome.responsibilityType ?? responsibilityType,
+      responsibilityUserId: outcome.responsibilityUserId ?? options.ownerUserId ?? null,
+      isInternalTransfer: outcome.isInternalTransfer,
+      importHash: buildImportHash(account.id, transaction),
+    };
+  });
 
   const result = await prisma.transaction.createMany({
     data,
