@@ -31,6 +31,7 @@ type AccountVisibilityFilter =
       OR: [
         { visibilityOwnerType: "SHARED" },
         { visibilityOwnerUserId: string },
+        { shares: { some: { sharedWithUserId: string } } },
       ];
     }
   | Record<string, never>;
@@ -40,6 +41,7 @@ type TransactionAccountVisibilityFilter =
       OR: [
         { account: { visibilityOwnerType: "SHARED" } },
         { account: { visibilityOwnerUserId: string } },
+        { account: { shares: { some: { sharedWithUserId: string } } } },
       ];
     }
   | Record<string, never>;
@@ -52,6 +54,7 @@ export function buildAccountVisibilityFilter(viewer: Viewer): AccountVisibilityF
     OR: [
       { visibilityOwnerType: "SHARED" },
       { visibilityOwnerUserId: viewer.userId },
+      { shares: { some: { sharedWithUserId: viewer.userId } } },
     ],
   };
 }
@@ -66,6 +69,7 @@ export function buildTransactionAccountVisibilityFilter(
     OR: [
       { account: { visibilityOwnerType: "SHARED" } },
       { account: { visibilityOwnerUserId: viewer.userId } },
+      { account: { shares: { some: { sharedWithUserId: viewer.userId } } } },
     ],
   };
 }

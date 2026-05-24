@@ -88,6 +88,14 @@ enum InvoiceMatchStatus {
   MANUALLY_CONFIRMED
 }
 
+enum ShareRole {
+  VIEWER
+}
+
+enum InvitationRole {
+  MEMBER
+}
+
 model User {
   id                             String               @id @default(cuid())
   email                          String               @unique
@@ -105,6 +113,10 @@ model User {
   sessions                       UserSession[]
   importBatches                  ImportBatch[]
   uploadedInvoices               InvoiceDocument[]     @relation("InvoiceUploader")
+  accountSharesGrantedToMe       AccountShare[]        @relation("AccountShareRecipient")
+  accountSharesIGranted          AccountShare[]        @relation("AccountShareGrantor")
+  invitationsICreated            Invitation[]          @relation("InvitationCreator")
+  invitationsIAccepted           Invitation[]          @relation("InvitationAcceptor")
 }
 
 model UserSession {
@@ -137,6 +149,7 @@ model Household {
   invoiceDocuments      InvoiceDocument[]
   auditEvents           AuditEvent[]
   activeSessions        UserSession[]
+  invitations           Invitation[]
 }
 
 model HouseholdMember {
@@ -186,9 +199,45 @@ model Account {
   balances              AccountBalance[]
   transactions          Transaction[]
   rules                 CategorizationRule[]
+  shares                AccountShare[]
 
   @@unique([bankConnectionId, externalAccountId])
   @@index([householdId, visibilityOwnerType])
+}
+
+model AccountShare {
+  id               String    @id @default(cuid())
+  accountId        String
+  sharedWithUserId String
+  role             ShareRole @default(VIEWER)
+  grantedByUserId  String
+  grantedAt        DateTime  @default(now())
+  account          Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  sharedWithUser   User      @relation("AccountShareRecipient", fields: [sharedWithUserId], references: [id], onDelete: Cascade)
+  grantedByUser    User      @relation("AccountShareGrantor", fields: [grantedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, sharedWithUserId])
+  @@index([sharedWithUserId])
+}
+
+model Invitation {
+  id                  String         @id @default(cuid())
+  householdId         String
+  email               String?
+  tokenHash           String         @unique
+  role                InvitationRole @default(MEMBER)
+  accountShareGrants  Json?
+  createdByUserId     String
+  acceptedByUserId    String?
+  acceptedAt          DateTime?
+  revokedAt           DateTime?
+  expiresAt           DateTime
+  createdAt           DateTime       @default(now())
+  household           Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdByUser       User           @relation("InvitationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  acceptedByUser      User?          @relation("InvitationAcceptor", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, expiresAt])
 }
 
 model AccountBalance {
