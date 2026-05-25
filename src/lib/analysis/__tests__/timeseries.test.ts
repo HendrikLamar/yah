@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   aggregateCashflowByPeriod,
+  aggregateCategorySpend,
+  aggregateIncomeComposition,
+  aggregateSavingsRateOverTime,
   aggregateTopCounterparties,
   defaultRange,
   parseGranularity,
@@ -123,6 +126,202 @@ describe("aggregateTopCounterparties", () => {
       5,
     );
     expect(rows[0]?.name).toBe("Unbekannt");
+  });
+
+  it("computes MoM delta against the prior equally-sized window", () => {
+    const data: AnalysisTransaction[] = [
+      // previous window: 2026-02
+      {
+        bookingDate: new Date("2026-02-10"),
+        amount: -100,
+        direction: "EXPENSE",
+        counterpartyName: "REWE",
+      },
+      // current window: 2026-03
+      {
+        bookingDate: new Date("2026-03-05"),
+        amount: -150,
+        direction: "EXPENSE",
+        counterpartyName: "REWE",
+      },
+      {
+        bookingDate: new Date("2026-03-15"),
+        amount: -200,
+        direction: "EXPENSE",
+        counterpartyName: "Amazon",
+      },
+    ];
+
+    const rows = aggregateTopCounterparties(data, 5, {
+      from: new Date("2026-03-01T00:00:00Z"),
+      to: new Date("2026-03-31T23:59:59Z"),
+    });
+
+    const rewe = rows.find((r) => r.name === "REWE");
+    expect(rewe?.previousPeriodAbs).toBe(100);
+    expect(rewe?.deltaPct).toBe(50);
+
+    const amazon = rows.find((r) => r.name === "Amazon");
+    expect(amazon?.previousPeriodAbs).toBe(0);
+    expect(amazon?.deltaPct).toBeNull();
+  });
+});
+
+describe("aggregateCategorySpend", () => {
+  const categorized: AnalysisTransaction[] = [
+    {
+      bookingDate: new Date("2026-03-05"),
+      amount: -100,
+      direction: "EXPENSE",
+      counterpartyName: "REWE",
+      categoryName: "Lebensmittel",
+    },
+    {
+      bookingDate: new Date("2026-03-20"),
+      amount: -80,
+      direction: "EXPENSE",
+      counterpartyName: "Aldi",
+      categoryName: "Lebensmittel",
+    },
+    {
+      bookingDate: new Date("2026-04-02"),
+      amount: -250,
+      direction: "EXPENSE",
+      counterpartyName: "Vermieter",
+      categoryName: "Miete",
+    },
+    {
+      bookingDate: new Date("2026-04-15"),
+      amount: -45,
+      direction: "EXPENSE",
+      counterpartyName: "Spotify",
+      categoryName: "Abos",
+    },
+    {
+      bookingDate: new Date("2026-04-18"),
+      amount: -25,
+      direction: "EXPENSE",
+      counterpartyName: "Cafe",
+      categoryName: null,
+    },
+  ];
+
+  it("pivots categories across periods, top-N + Other rollup", () => {
+    const result = aggregateCategorySpend(categorized, "month", 2);
+    expect(result.categories).toContain("Miete");
+    expect(result.categories).toContain("Lebensmittel");
+    expect(result.categories).toContain("Andere");
+    expect(result.points).toHaveLength(2);
+    const march = result.points.find((p) => p.periodKey === "2026-03");
+    expect(march?.totals["Lebensmittel"]).toBe(180);
+  });
+
+  it("reports uncategorized share", () => {
+    const result = aggregateCategorySpend(categorized, "month", 5);
+    expect(result.uncategorizedShare).toBeCloseTo(25 / 500, 4);
+  });
+
+  it("handles empty input", () => {
+    const result = aggregateCategorySpend([], "month", 5);
+    expect(result.points).toHaveLength(0);
+    expect(result.uncategorizedShare).toBe(0);
+  });
+});
+
+describe("aggregateIncomeComposition", () => {
+  const incomeData: AnalysisTransaction[] = [
+    {
+      bookingDate: new Date("2026-03-25"),
+      amount: 3500,
+      direction: "INCOME",
+      counterpartyName: "MYOTWIN GMBH",
+    },
+    {
+      bookingDate: new Date("2026-04-25"),
+      amount: 3500,
+      direction: "INCOME",
+      counterpartyName: "MYOTWIN GMBH",
+    },
+    {
+      bookingDate: new Date("2026-04-12"),
+      amount: 80,
+      direction: "INCOME",
+      counterpartyName: "Krankenkasse",
+      purposeRawSearchHint: "Erstattung Brille",
+    },
+    {
+      bookingDate: new Date("2026-04-20"),
+      amount: 60,
+      direction: "INCOME",
+      counterpartyName: "Trade Republic",
+      purposeRawSearchHint: "Dividende",
+    },
+    {
+      bookingDate: new Date("2026-04-28"),
+      amount: 150,
+      direction: "INCOME",
+      counterpartyName: "Freund",
+    },
+  ];
+
+  it("classifies salary, refund, investment and other", () => {
+    const result = aggregateIncomeComposition(incomeData);
+    const labelFor = (b: string) => result.slices.find((s) => s.bucket === b);
+    expect(labelFor("salary")?.amount).toBe(7000);
+    expect(labelFor("refund")?.amount).toBe(80);
+    expect(labelFor("investment")?.amount).toBe(60);
+    expect(labelFor("other")?.amount).toBe(150);
+  });
+
+  it("provides monthly history of composition", () => {
+    const result = aggregateIncomeComposition(incomeData);
+    const april = result.history.find((p) => p.periodKey === "2026-04");
+    expect(april?.salary).toBe(3500);
+    expect(april?.refund).toBe(80);
+    expect(april?.investment).toBe(60);
+    expect(april?.other).toBe(150);
+  });
+
+  it("returns empty composition when no income", () => {
+    const result = aggregateIncomeComposition([]);
+    expect(result.slices).toHaveLength(0);
+    expect(result.total).toBe(0);
+  });
+});
+
+describe("aggregateSavingsRateOverTime", () => {
+  const monthly: AnalysisTransaction[] = [
+    { bookingDate: new Date("2026-01-25"), amount: 3000, direction: "INCOME", counterpartyName: "E" },
+    { bookingDate: new Date("2026-01-10"), amount: -2400, direction: "EXPENSE", counterpartyName: "x" },
+    { bookingDate: new Date("2026-02-25"), amount: 3000, direction: "INCOME", counterpartyName: "E" },
+    { bookingDate: new Date("2026-02-10"), amount: -1500, direction: "EXPENSE", counterpartyName: "x" },
+    { bookingDate: new Date("2026-03-25"), amount: 3000, direction: "INCOME", counterpartyName: "E" },
+    { bookingDate: new Date("2026-03-10"), amount: -2700, direction: "EXPENSE", counterpartyName: "x" },
+  ];
+
+  it("computes monthly savings rate and rolling 3M average", () => {
+    const points = aggregateSavingsRateOverTime(monthly);
+    expect(points).toHaveLength(3);
+    expect(points[0]?.savingsRate).toBeCloseTo(20, 2);
+    expect(points[1]?.savingsRate).toBeCloseTo(50, 2);
+    expect(points[2]?.savingsRate).toBeCloseTo(10, 2);
+    expect(points[2]?.savingsRateAvg3).toBeCloseTo((20 + 50 + 10) / 3, 2);
+    expect(points[0]?.savingsRateAvg3).toBeNull();
+  });
+
+  it("excludes internal transfers from savings rate", () => {
+    const data: AnalysisTransaction[] = [
+      ...monthly,
+      {
+        bookingDate: new Date("2026-03-15"),
+        amount: -500,
+        direction: "EXPENSE",
+        counterpartyName: "self",
+        isInternalTransfer: true,
+      },
+    ];
+    const points = aggregateSavingsRateOverTime(data);
+    expect(points[2]?.expenses).toBe(2700);
   });
 });
 
