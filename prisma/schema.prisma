@@ -56,6 +56,12 @@ enum CategoryKind {
   TRANSFER
 }
 
+enum BudgetPeriod {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
 enum MatchField {
   PURPOSE_RAW
   COUNTERPARTY_NAME
@@ -295,24 +301,45 @@ model Transaction {
 }
 
 model Category {
-  id         String               @id @default(cuid())
-  householdId String
-  parentId   String?
-  name       String
-  slug       String
-  kind       CategoryKind
-  color      String?
-  isSystem   Boolean              @default(false)
-  isArchived Boolean              @default(false)
-  createdAt  DateTime             @default(now())
-  updatedAt  DateTime             @updatedAt
-  household  Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  parent     Category?            @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children   Category[]           @relation("CategoryTree")
-  transactions Transaction[]
-  rules      CategorizationRule[]
+  id            String               @id @default(cuid())
+  householdId   String
+  parentId      String?
+  name          String
+  slug          String
+  kind          CategoryKind
+  color         String?
+  isSystem      Boolean              @default(false)
+  isArchived    Boolean              @default(false)
+  limitAmount   Decimal?             @db.Decimal(14, 2)
+  limitPeriod   BudgetPeriod?
+  limitRollover Boolean              @default(false)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  household     Household            @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  parent        Category?            @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children      Category[]           @relation("CategoryTree")
+  transactions  Transaction[]
+  rules         CategorizationRule[]
+  limitAlerts   CategoryLimitAlert[]
 
   @@unique([householdId, slug])
+}
+
+model CategoryLimitAlert {
+  id             String    @id @default(cuid())
+  categoryId     String
+  periodStart    DateTime
+  periodEnd      DateTime
+  threshold      Decimal   @db.Decimal(5, 2)
+  spentAmount    Decimal   @db.Decimal(14, 2)
+  limitAmount    Decimal   @db.Decimal(14, 2)
+  triggeredAt    DateTime  @default(now())
+  channel        String    @default("in_app")
+  acknowledgedAt DateTime?
+  category       Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, periodStart, threshold])
+  @@index([categoryId, acknowledgedAt])
 }
 
 model CategorizationRule {

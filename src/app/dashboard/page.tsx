@@ -15,6 +15,10 @@ import {
   parseRange,
   type AnalysisTransaction,
 } from "@/lib/analysis/timeseries";
+import {
+  evaluateHouseholdBudgets,
+  listUnacknowledgedAlerts,
+} from "@/lib/budgets/evaluation";
 import { prisma } from "@/lib/db/prisma";
 import { formatCurrency, formatDateRange, formatIsoDate } from "@/lib/format";
 import {
@@ -23,6 +27,7 @@ import {
   getViewerHouseholdContext,
 } from "@/lib/household/viewer";
 
+import { BudgetOverview } from "./budget-overview";
 import { CashflowChart } from "./cashflow-chart";
 import { CategorySpendChart } from "./category-spend-chart";
 import { CounterpartiesChart } from "./counterparties-chart";
@@ -46,6 +51,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const range = parseRange(firstValue(resolved.from), firstValue(resolved.to), now);
   const granularity = parseGranularity(firstValue(resolved.granularity));
+
+  const budgetEval = await evaluateHouseholdBudgets({ householdId: context.householdId });
+  const budgetAlerts = await listUnacknowledgedAlerts(context.householdId);
 
   const [accounts, monthTransactions, rangeTransactions, previousWindowTransactions] = await Promise.all([
     prisma.account.findMany({
@@ -187,6 +195,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           variant: "success",
         }}
       />
+
+      <div className="mb-lg">
+        <BudgetOverview evaluations={budgetEval.evaluations} alerts={budgetAlerts} />
+      </div>
 
       <div className="grid grid-cols-12 gap-gutter mb-lg">
         <div className="col-span-12 md:col-span-6">
