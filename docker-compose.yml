@@ -41,7 +41,7 @@ services:
     ports:
       - "3000:3000"
     command: >-
-      sh -c "npm run prisma:generate && npm run prisma:db:push && npm run prisma:seed && npm run start"
+      sh -c "npm run prisma:generate && npm run prisma:db:push && npm run start"
 
 volumes:
   postgres_data:

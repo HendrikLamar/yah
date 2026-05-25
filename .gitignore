@@ -52,3 +52,7 @@ next-env.d.ts
 graphify-out/cache/
 graphify-out/manifest.json
 graphify-out/.graphify_python
+
+# local-only working copies (graphify snapshots, design backups)
+*.local-backup
+*.local-backup/
