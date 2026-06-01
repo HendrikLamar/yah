@@ -21,13 +21,16 @@ export default async function DashboardPage() {
       <main style={{ maxWidth: 640, margin: '12vh auto', fontFamily: 'system-ui', textAlign: 'center' }}>
         <h1>💶 Willkommen</h1>
         <p style={{ color: '#8b98a5' }}>Noch keine Konten verbunden.</p>
-        <form action="/api/banks/connect" method="post">
-          {/* In der echten App: Bank-Auswahl-Dialog -> POST mit institutionId */}
-          <a href="/connect" style={{ display: 'inline-block', marginTop: 16, padding: '10px 18px',
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+          <a href="/connect" style={{ display: 'inline-block', padding: '10px 18px',
             background: '#4dabf7', color: '#0f1419', borderRadius: 8, fontWeight: 600, textDecoration: 'none' }}>
             Bankkonto verbinden
           </a>
-        </form>
+          <a href="/import" style={{ display: 'inline-block', padding: '10px 18px',
+            background: '#222b35', color: '#e6edf3', border: '1px solid #2d3742', borderRadius: 8, fontWeight: 600, textDecoration: 'none' }}>
+            CSV importieren
+          </a>
+        </div>
       </main>
     );
   }
