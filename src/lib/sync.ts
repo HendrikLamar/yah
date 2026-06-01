@@ -2,7 +2,7 @@
 // GoCardless, categorise them, and upsert into Postgres (deduped by
 // gc_transaction_id). Shared by the user-triggered route and the cron job.
 import { gocardless } from './gocardless';
-import { classify } from './categorize';
+import { classifyPersonal } from './categorize';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const toCents = (s: string) => Math.round(parseFloat(s) * 100);
@@ -42,7 +42,7 @@ export async function syncConnection(db: SupabaseClient, userId: string, connect
           ?? (b.remittanceInformationUnstructuredArray ?? []).join(' ')) ?? '';
         const cpIban = b.creditorAccount?.iban ?? b.debtorAccount?.iban ?? null;
         const isInternal = !!cpIban && ownIbans.has(cpIban);
-        const { category, group } = classify({ counterparty, purpose, amountCents, isInternal });
+        const { category, group } = classifyPersonal({ counterparty, purpose, amountCents, isInternal });
 
         const { error } = await db.from('transactions').upsert({
           user_id: userId, account_id: acc.id,
