@@ -1,0 +1,7 @@
+# Plans written by /plan-feature live here, one per branch:
+#   .claude/plans/<branch>.md
+#
+# Optional critique notes from /autopilot's plan-critique phase:
+#   .claude/plans/<branch>-critique.md
+#
+# Plans ARE version-controlled — they capture locked decisions per feature.
