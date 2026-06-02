@@ -12,3 +12,8 @@ next-env.d.ts
 supabase/.temp/
 test-results/
 playwright-report/
+
+# graphify knowledge graph (generated output — regenerate with `/graphify .`)
+graphify-out/
+.graphify_*.json
+.graphify_python
