@@ -1,119 +1,106 @@
-// Assembles the exact JSON shape that public/dashboard-view.js consumes:
-// { m, b, tx, j, jx, c, cx } (see docs/DATA_SHAPE.md). All money is in EUR.
-// The numeric heavy lifting lives in analytics.ts; this layer wires accounts and
-// transactions together and shapes the account/series/summary/slim-list views.
-import type { Account, Transaction } from './types';
+// Assembles the per-account view consumed by public/dashboard-view.js:
+// { meta, accounts: AccountView[], consolidated: ConsolidatedView | null }.
+// One AccountView per account that has transactions; a consolidated household
+// tab only when 2+ accounts have data. Numeric work lives in analytics.ts.
+// All money here is EUR (integer cents only in the DB / analytics input).
+import type {
+  Account, Transaction, AccountRole, AccountView, ConsolidatedView, DashboardData, SlimTx,
+} from './types';
 import {
-  markInternal, detectYear, accountSeries, giroSummary, detectSubs, buildBudget,
-  personalMetrics, jointMetrics, consolidatedMetrics,
+  markInternal, detectYear, accountSeries, expenseBreakdown, incomeExpenseMonthly,
+  MONTH_LABELS, monthsOf,
 } from './analytics';
 
 const maskIban = (iban: string | null): string =>
   iban && iban.length >= 8 ? `${iban.slice(0, 4)} … ${iban.slice(-4)}` : (iban ?? '');
 
 const monthOf = (d: string) => d.slice(0, 7);
-
-const KIND_OF_CATEGORY: Record<string, string> = {
-  'Einnahmen · Zinsen': 'Zinsen',
-  'Sparen (Tagesgeld-Einzahlung)': 'Sparen-Zufluss',
-  'Entsparen (Tagesgeld-Auszahlung)': 'Entsparen-Abfluss',
+const sum = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100;
+const addInto = (target: Record<string, number[]>, src: Record<string, number[]>) => {
+  for (const [c, arr] of Object.entries(src)) {
+    if (!target[c]) target[c] = new Array(12).fill(0);
+    arr.forEach((v, i) => { target[c][i] = Math.round((target[c][i] + v) * 100) / 100; });
+  }
 };
-const HARMONISE: Record<string, string> = { Gesundheit: 'Gesundheit & Freizeit' };
-const KONSUM_CATS = new Set([
-  'Wohnen & Haushalt','Kredite & Darlehen','Lebensmittel & Drogerie','Versicherungen',
-  'Abos & Medien','Mobilität & Reise','Restaurants & Gastronomie','Gesundheit',
-  'Shopping & Sonstiges','Kreditkarte (AMEX)','Bargeld','Spenden & Beiträge','Steuern & Gebühren',
-]);
 
-export function buildDashboardData(accounts: Account[], rawTxns: Transaction[]) {
+const roleOf = (a: Account): AccountRole =>
+  a.is_joint || a.account_type === 'joint' ? 'joint' : a.account_type === 'savings' ? 'tages' : 'giro';
+
+const slim = (t: Transaction): SlimTx => ({
+  d: t.booking_date, mo: monthOf(t.booking_date),
+  e: (t.counterparty ?? '').slice(0, 40), z: (t.purpose ?? '').slice(0, 90),
+  a: t.amount_cents / 100, c: t.category ?? 'Sonstige', int: t.is_internal ? 1 : 0,
+});
+
+export function buildDashboardData(accounts: Account[], rawTxns: Transaction[]): DashboardData | null {
   if (!accounts.length) return null;
   const txns = markInternal(rawTxns, accounts);
   const year = detectYear(txns.map((t) => t.booking_date));
 
-  const roleOf = (a: Account): 'giro' | 'tages' | 'joint' =>
-    a.is_joint || a.account_type === 'joint' ? 'joint' : a.account_type === 'savings' ? 'tages' : 'giro';
-  const acctRole = new Map(accounts.map((a) => [a.id, roleOf(a)]));
-  const byRole = (role: string) => txns.filter((t) => acctRole.get(t.account_id) === role);
-  const giroTx = byRole('giro');
-  const tagesTx = byRole('tages');
-  const jointTx = byRole('joint');
+  const byAccount = new Map<string, Transaction[]>();
+  for (const t of txns) {
+    const list = byAccount.get(t.account_id);
+    if (list) list.push(t); else byAccount.set(t.account_id, [t]);
+  }
 
-  const giroAccs = accounts.filter((a) => roleOf(a) === 'giro');
-  const tagesAccs = accounts.filter((a) => roleOf(a) === 'tages');
-  const jointAcc = accounts.find((a) => roleOf(a) === 'joint') ?? null;
-  const giroIban = giroAccs[0]?.iban ?? null;
-  const jointIban = jointAcc?.iban ?? null;
-  const sumBalance = (accs: Account[]) => accs.reduce((s, a) => s + (a.balance_cents ?? 0), 0);
+  const withData = accounts.filter((a) => (byAccount.get(a.id)?.length ?? 0) > 0);
+  if (!withData.length) return null;
 
-  const pm = personalMetrics(giroTx, tagesTx, year);
-  const giroSeries = accountSeries(giroTx, year, sumBalance(giroAccs));
-  const tagesSeries = accountSeries(tagesTx, year, sumBalance(tagesAccs));
+  const views: AccountView[] = withData.map((a) => {
+    const at = byAccount.get(a.id)!;
+    const series = accountSeries(at, year, a.balance_cents ?? 0);
+    const { cat_total, cat_month } = expenseBreakdown(at, year);
+    const { inc_m, exp_m } = incomeExpenseMonthly(at, year);
+    const income = sum(inc_m);
+    const expenses = sum(exp_m);
+    return {
+      id: a.id,
+      role: roleOf(a),
+      label: a.display_name ?? a.name,
+      shared: a.is_joint,
+      iban: maskIban(a.iban),
+      n: at.length,
+      now: (a.balance_cents ?? 0) / 100,
+      start: series.start, end: series.end, net: series.net, series: series.series,
+      months: monthsOf(year), mlabels: MONTH_LABELS,
+      income, expenses, net_op: Math.round((income - expenses) * 100) / 100,
+      inc_m, exp_m, cat_total, cat_month,
+      tx: [...at].sort((x, y) => x.booking_date.localeCompare(y.booking_date)).map(slim),
+    };
+  });
 
-  const tagesTxnList = [...tagesTx]
-    .sort((a, b) => a.booking_date.localeCompare(b.booking_date))
-    .map((t) => ({
-      d: t.booking_date, e: (t.counterparty ?? '').slice(0, 34), z: (t.purpose ?? '').slice(0, 46),
-      a: t.amount_cents / 100, k: KIND_OF_CATEGORY[t.category ?? ''] ?? 'Sonstige',
-    }));
-
-  const m = {
-    ...pm,
-    n_total: giroTx.length + tagesTx.length,
-    subs: detectSubs(giroTx),
-    accounts: {
-      giro: {
-        name: giroAccs[0]?.name ?? 'Girokonto', iban: maskIban(giroIban),
-        end2025: giroSeries.end, net: giroSeries.net, start2025: giroSeries.start,
-        now: (sumBalance(giroAccs)) / 100, n: giroTx.length, series: giroSeries.series,
-        summary: giroSummary(giroTx),
-      },
-      tages: {
-        name: tagesAccs[0]?.name ?? 'Tagesgeldkonto', iban: maskIban(tagesAccs[0]?.iban ?? null),
-        end2025: tagesSeries.end, net: tagesSeries.net, start2025: tagesSeries.start,
-        now: (sumBalance(tagesAccs)) / 100, n: tagesTx.length, series: tagesSeries.series,
-        zins: pm.zins_total, dep: pm.spar_tg_dep, wd: pm.tg_wd, txns: tagesTxnList,
-      },
-    },
+  const meta = {
+    year,
+    n_total: txns.length,
+    n_accounts: views.length,
+    total_balance: sum(withData.map((a) => (a.balance_cents ?? 0) / 100)),
   };
 
-  const b = buildBudget(pm);
-
-  const acctLabel = (id: string) => (acctRole.get(id) === 'tages' ? 'Tagesgeld' : 'Giro');
-  const tx = [...giroTx, ...tagesTx].map((t) => ({
-    acct: acctLabel(t.account_id), d: t.booking_date, mo: monthOf(t.booking_date),
-    e: (t.counterparty ?? '').slice(0, 40), z: (t.purpose ?? '').slice(0, 90),
-    a: t.amount_cents / 100, c: t.category ?? 'Shopping & Sonstiges', int: t.is_internal ? 1 : 0,
-  }));
-
-  const jm = jointMetrics(jointTx, year, sumBalance(jointAcc ? [jointAcc] : []));
-  const { start, end, ...jmRest } = jm;
-  const j = { ...jmRest, start2025: start, end2025: end };
-  const jx = jointTx.map((t) => ({
-    acct: 'Gemeinschaft', d: t.booking_date, mo: monthOf(t.booking_date),
-    e: (t.counterparty ?? '').slice(0, 40), z: (t.purpose ?? '').slice(0, 90),
-    a: t.amount_cents / 100, c: t.category ?? 'Shopping & Sonstiges', int: t.is_internal ? 1 : 0,
-  }));
-
-  const c = consolidatedMetrics({ giro: giroTx, joint: jointTx, jointIban, pm, jm, year });
-  const cx: { src: string; d: string; mo: string; e: string; z: string; a: number; c: string }[] = [];
-  for (const t of giroTx) {
-    if (t.booking_date.slice(0, 4) !== String(year) || t.amount_cents >= 0) continue;
-    if (jointIban && t.counterparty_iban === jointIban) continue;
-    if (!KONSUM_CATS.has(t.category ?? '')) continue;
-    cx.push({
-      src: 'Hendrik', d: t.booking_date, mo: monthOf(t.booking_date),
-      e: (t.counterparty ?? '').slice(0, 40), z: (t.purpose ?? '').slice(0, 90),
-      a: t.amount_cents / 100, c: HARMONISE[t.category as string] ?? (t.category as string),
-    });
-  }
-  for (const t of jointTx) {
-    if (t.booking_date.slice(0, 4) !== String(year) || t.amount_cents >= 0) continue;
-    cx.push({
-      src: 'Gemeinschaft', d: t.booking_date, mo: monthOf(t.booking_date),
-      e: (t.counterparty ?? '').slice(0, 40), z: (t.purpose ?? '').slice(0, 90),
-      a: t.amount_cents / 100, c: t.category ?? 'Shopping & Sonstiges',
-    });
+  let consolidated: ConsolidatedView | null = null;
+  if (views.length >= 2) {
+    const inc_m = new Array(12).fill(0);
+    const exp_m = new Array(12).fill(0);
+    const cat_total: Record<string, number> = {};
+    const cat_month: Record<string, number[]> = {};
+    const ctx: (SlimTx & { acct: string })[] = [];
+    for (const v of views) {
+      v.inc_m.forEach((x, i) => { inc_m[i] = Math.round((inc_m[i] + x) * 100) / 100; });
+      v.exp_m.forEach((x, i) => { exp_m[i] = Math.round((exp_m[i] + x) * 100) / 100; });
+      for (const [c, t] of Object.entries(v.cat_total)) cat_total[c] = Math.round(((cat_total[c] ?? 0) + t) * 100) / 100;
+      addInto(cat_month, v.cat_month);
+      for (const row of v.tx) ctx.push({ ...row, acct: v.label });
+    }
+    const income = sum(inc_m);
+    const expenses = sum(exp_m);
+    consolidated = {
+      months: monthsOf(year), mlabels: MONTH_LABELS,
+      total_balance: meta.total_balance,
+      income, expenses, net_op: Math.round((income - expenses) * 100) / 100,
+      inc_m, exp_m, cat_total, cat_month,
+      accounts: views.map((v) => ({ id: v.id, label: v.label, role: v.role, balance: v.now, net: v.net })),
+      tx: ctx.sort((x, y) => x.d.localeCompare(y.d)),
+    };
   }
 
-  return { m, b, tx, j, jx, c, cx };
+  return { meta, accounts: views, consolidated };
 }

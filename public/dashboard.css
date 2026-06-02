@@ -37,6 +37,7 @@ tr.active td{background:#1d3142}
 .tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:6px;font-weight:600}
 .tag.fix{background:#3b2f1a;color:var(--yel)}.tag.var{background:#1a2e3b;color:var(--acc)}
 .tag.int{background:#2c2238;color:var(--vio)}
+.shared-badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;background:rgba(177,151,252,.18);color:var(--vio);vertical-align:middle;margin-left:6px}
 .clickcard{cursor:pointer;transition:border-color .15s,box-shadow .15s}
 .clickcard:hover{border-color:var(--acc)}
 .selcard{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}

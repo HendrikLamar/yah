@@ -77,8 +77,10 @@ t('full UI: login -> import CSV -> dashboard renders', async ({ page }) => {
 
   // 5) Server action redirects back to the dashboard, now populated
   await page.waitForURL('**/dashboard');
-  await expect(page.getByText('Finanzanalyse 2025')).toBeVisible();
-  await expect(page.getByText('Meine Konten')).toBeVisible();
+  await expect(page.getByText('Finanzanalyse')).toBeVisible();
+  // one tab per imported account; the CSV created a single "Girokonto"
+  await expect(page.locator('.tabbtn')).toHaveCount(1);
+  await expect(page.locator('.tabbtn').first()).toContainText('Girokonto');
 
   // 6) Verify rows actually persisted for this user
   const { count } = await admin
