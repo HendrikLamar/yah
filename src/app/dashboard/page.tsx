@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { buildDashboardData } from '@/lib/buildDashboardData';
+import { getMemberAccountIds } from '@/lib/memberAccounts';
 import DashboardView from '@/components/DashboardView';
 import AppHeader from '@/components/AppHeader';
 
@@ -11,11 +12,24 @@ export default async function DashboardPage() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: accounts } = await db.from('accounts').select('*').eq('user_id', user.id);
-  const { data: txns } = await db.from('transactions')
-    .select('*').eq('user_id', user.id).order('booking_date', { ascending: false }).limit(5000);
+  const ids = await getMemberAccountIds(db, user.id);
 
-  const data = buildDashboardData((accounts ?? []) as any, (txns ?? []) as any);
+  let accounts: any[] = [];
+  let txns: any[] = [];
+  if (ids.length) {
+    const [acctRes, txRes, memberRes] = await Promise.all([
+      db.from('accounts').select('*').in('id', ids),
+      db.from('transactions').select('*').in('account_id', ids)
+        .order('booking_date', { ascending: false }).limit(5000),
+      db.from('account_members').select('account_id').in('account_id', ids),
+    ]);
+    const counts = new Map<string, number>();
+    for (const m of memberRes.data ?? []) counts.set(m.account_id, (counts.get(m.account_id) ?? 0) + 1);
+    accounts = (acctRes.data ?? []).map((a) => ({ ...a, member_count: counts.get(a.id) ?? 1 }));
+    txns = txRes.data ?? [];
+  }
+
+  const data = buildDashboardData(accounts as any, txns as any);
 
   if (!data) {
     return (

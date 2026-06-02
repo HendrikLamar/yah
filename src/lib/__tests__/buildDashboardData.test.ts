@@ -70,15 +70,26 @@ describe('buildDashboardData', () => {
     expect(c.tx.length).toBe(giroTx.length + jointTx.length);
   });
 
-  it('maps role and shared from account_type / is_joint', () => {
+  it('maps role from account_type / is_joint (independent of shared)', () => {
     const d = buildDashboardData([giroAcc, tagesAcc, jointAcc],
       [...giroTx, tx({ account_id: 't', booking_date: '2025-02-01', amount_cents: 100, category: 'Einnahmen · Zinsen' }), ...jointTx])!;
     const byId = Object.fromEntries(d.accounts.map((a) => [a.id, a]));
     expect(byId['g'].role).toBe('giro');
     expect(byId['t'].role).toBe('tages');
     expect(byId['j'].role).toBe('joint');
-    expect(byId['j'].shared).toBe(true);
-    expect(byId['g'].shared).toBe(false);
+  });
+
+  it('derives shared from member_count > 1, not is_joint', () => {
+    // is_joint=true but only one member → not shared (badge source is now membership).
+    const solo: Account = { ...jointAcc, member_count: 1 };
+    expect(buildDashboardData([solo], jointTx)!.accounts[0].shared).toBe(false);
+
+    // is_joint=false but two members → shared.
+    const shared: Account = { ...giroAcc, member_count: 2 };
+    expect(buildDashboardData([shared], giroTx)!.accounts[0].shared).toBe(true);
+
+    // absent member_count → treated as 1 → not shared.
+    expect(buildDashboardData([giroAcc], giroTx)!.accounts[0].shared).toBe(false);
   });
 
   it('uses display_name when set, otherwise the bank name', () => {

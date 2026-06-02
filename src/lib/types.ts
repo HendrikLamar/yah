@@ -3,6 +3,36 @@ export interface Account {
   account_type: 'giro' | 'savings' | 'joint';
   is_joint: boolean; balance_cents: number | null; owner_label: string | null;
   display_name: string | null;
+  member_count?: number; // number of account_members; shared badge = > 1
+}
+
+export type MembershipRole = 'owner' | 'member';
+
+export interface AccountMember {
+  account_id: string; user_id: string; role: MembershipRole; created_at: string;
+}
+export interface AccountInvitation {
+  id: string; account_id: string; inviter_id: string; invitee_id: string;
+  status: 'pending' | 'accepted' | 'declined' | 'revoked';
+  created_at: string; responded_at: string | null;
+}
+// Row from list_account_members RPC.
+export interface MemberInfo { user_id: string; email: string; role: MembershipRole; }
+// Row from my_invitations RPC (incoming, pending).
+export interface IncomingInvitation {
+  invitation_id: string; account_id: string; account_label: string;
+  inviter_email: string; created_at: string;
+}
+// Row from list_account_invitations RPC (outgoing, pending — owner view).
+export interface OutgoingInvitation {
+  invitation_id: string; invitee_email: string; created_at: string;
+}
+// One account row on /accounts, enriched with the viewer's role and sharing state.
+export interface SharedAccountCard {
+  account: Account;
+  viewerRole: MembershipRole;
+  members: MemberInfo[];
+  pending: OutgoingInvitation[]; // outgoing invites (owner only; [] for members)
 }
 export interface Transaction {
   id: string; account_id: string; booking_date: string; amount_cents: number;

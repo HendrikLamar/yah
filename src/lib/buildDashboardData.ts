@@ -57,7 +57,7 @@ export function buildDashboardData(accounts: Account[], rawTxns: Transaction[]):
       id: a.id,
       role: roleOf(a),
       label: a.display_name ?? a.name,
-      shared: a.is_joint,
+      shared: (a.member_count ?? 1) > 1,
       iban: maskIban(a.iban),
       n: at.length,
       now: (a.balance_cents ?? 0) / 100,
