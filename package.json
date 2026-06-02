@@ -1,42 +1,28 @@
 {
-  "name": "household-finance",
+  "name": "finanz-webservice",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "prisma:generate": "prisma generate",
-    "prisma:validate": "prisma validate",
-    "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:db:push": "prisma db push",
-    "prisma:seed": "tsx prisma/seed.ts",
-    "dkb:test": "bash -lc 'source /home/pi/.hermes/hermes-agent/venv/bin/activate && python scripts/dkb_connection_test.py'",
-    "py:test": "bash -lc 'source /home/pi/.hermes/hermes-agent/venv/bin/activate && pytest banking_spike/tests -q'"
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^7.8.0",
-    "dotenv": "^17.4.2",
-    "next": "16.2.6",
-    "pg": "^8.21.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "recharts": "^3.8.1"
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.0",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.6",
-    "prisma": "^7.8.0",
-    "tailwindcss": "^4",
-    "tsx": "^4.22.1",
-    "typescript": "^5",
-    "vitest": "^4.1.6"
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.7",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.8"
   }
 }
