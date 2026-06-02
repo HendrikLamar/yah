@@ -9,3 +9,6 @@ coverage/
 dist/
 next-env.d.ts
 *.tsbuildinfo
+supabase/.temp/
+test-results/
+playwright-report/

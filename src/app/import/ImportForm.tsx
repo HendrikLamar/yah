@@ -29,6 +29,8 @@ export default function ImportForm({ accounts }: { accounts: AccountOption[] }) 
       <form action={formAction} style={{ display: 'grid', gap: 14, marginTop: 16 }}>
         <input type="file" name="file" accept=".csv,text/csv" required style={inp} />
 
+        {accounts.length === 0 && <input type="hidden" name="mode" value="new" />}
+
         {accounts.length > 0 && (
           <fieldset style={fs}>
             <legend>Zielkonto</legend>
