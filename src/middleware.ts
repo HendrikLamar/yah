@@ -1,5 +1,5 @@
 // Protects app routes: refreshes the Supabase session cookie and redirects
-// unauthenticated users away from /dashboard and /connect.
+// unauthenticated users away from /dashboard, /connect and /accounts.
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
@@ -18,9 +18,9 @@ export async function middleware(req: NextRequest) {
     }
   );
   const { data: { user } } = await supabase.auth.getUser();
-  const protectedPath = /^\/(dashboard|connect)/.test(req.nextUrl.pathname);
+  const protectedPath = /^\/(dashboard|connect|accounts)/.test(req.nextUrl.pathname);
   if (protectedPath && !user) return NextResponse.redirect(new URL('/login', req.url));
   return res;
 }
 
-export const config = { matcher: ['/dashboard/:path*', '/connect/:path*'] };
+export const config = { matcher: ['/dashboard/:path*', '/connect/:path*', '/accounts/:path*'] };

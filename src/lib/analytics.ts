@@ -63,6 +63,45 @@ export function accountSeries(txns: Transaction[], year: number, endBalanceCents
 }
 
 // ---------------------------------------------------------------------------
+// Generic per-account aggregations (role-agnostic; used by the per-account view)
+// ---------------------------------------------------------------------------
+const DEFAULT_EXPENSE_CAT = 'Sonstige';
+
+// Expense categories and their monthly breakdown for one account's transactions.
+// Counts only in-year, non-internal outflows; values are positive EUR.
+export interface ExpenseBreakdown { cat_total: Record<string, number>; cat_month: Record<string, number[]>; }
+export function expenseBreakdown(txns: Transaction[], year: number): ExpenseBreakdown {
+  const totC: Record<string, number> = {};
+  const monC: Record<string, number[]> = {};
+  for (const t of txns) {
+    if (!inYear(t, year) || t.is_internal || t.amount_cents >= 0) continue;
+    const cat = t.category ?? DEFAULT_EXPENSE_CAT;
+    if (!(cat in totC)) { totC[cat] = 0; monC[cat] = new Array(12).fill(0); }
+    totC[cat] += -t.amount_cents;
+    monC[cat][monthIndex(t.booking_date)] += -t.amount_cents;
+  }
+  const cat_total: Record<string, number> = {};
+  const cat_month: Record<string, number[]> = {};
+  for (const c of Object.keys(totC)) { cat_total[c] = eurc(totC[c]); cat_month[c] = monC[c].map(eurc); }
+  return { cat_total, cat_month };
+}
+
+// Monthly income (positive) and expense (abs of negative) EUR arrays for one
+// account, excluding internal transfers between the user's own accounts.
+export interface IncomeExpenseMonthly { inc_m: number[]; exp_m: number[]; }
+export function incomeExpenseMonthly(txns: Transaction[], year: number): IncomeExpenseMonthly {
+  const incCents = new Array(12).fill(0);
+  const expCents = new Array(12).fill(0);
+  for (const t of txns) {
+    if (!inYear(t, year) || t.is_internal) continue;
+    const mi = monthIndex(t.booking_date);
+    if (t.amount_cents > 0) incCents[mi] += t.amount_cents;
+    else expCents[mi] += -t.amount_cents;
+  }
+  return { inc_m: incCents.map(eurc), exp_m: expCents.map(eurc) };
+}
+
+// ---------------------------------------------------------------------------
 // Personal (Giro + Tagesgeld)
 // ---------------------------------------------------------------------------
 const KONSUM_CATS = [

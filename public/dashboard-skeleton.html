@@ -1,138 +1,79 @@
-<h1>💶 Finanzanalyse 2025</h1>
+<h1>💶 Finanzanalyse <span id="year"></span></h1>
 <div class="sub" id="meta"></div>
 
-<div class="tabnav">
-  <button class="tabbtn active" data-tab="meine">🏦 Meine Konten</button>
-  <button class="tabbtn" data-tab="gemeinschaft">👨‍👩‍👧 Gemeinschaftskonto</button>
-  <button class="tabbtn" data-tab="haushalt">🏠 Haushalt gesamt</button>
-</div>
+<div class="tabnav" id="tabbar"></div>
+<div id="panels"></div>
 
-<div id="tab-meine" class="tabpanel show">
-<div class="kpibar">
-<div class="grid kpis" id="kpis"></div>
-</div>
-<div class="note-box" id="caveat"></div>
+<template id="tpl-account">
+  <div class="tabpanel">
+    <div class="kpibar"><div class="grid kpis" data-el="kpis"></div></div>
+    <div class="note-box" data-el="caption"></div>
 
-<h2>Konten</h2>
-<div class="sub">Giro und Tagesgeld als eigenständige Konten. Überweisungen dazwischen sind interne Transfers und in beiden Konten sichtbar – im Cashflow werden sie nicht als Einnahme/Ausgabe gezählt. <b>Tipp: Klick auf eine Kontokarte zeigt das jeweilige Konto im Detail.</b></div>
-<div class="grid accts" id="acards"></div>
+    <h2>Konto</h2>
+    <div class="grid accts"><div class="card acard" data-el="acard"></div></div>
 
-<h2 id="detailtitle">Konto im Detail</h2>
-<div class="grid two">
-  <div class="card"><canvas id="detailchart" height="200"></canvas></div>
-  <div class="card"><div id="detailtable"></div></div>
-</div>
+    <h2>Saldoentwicklung</h2>
+    <div class="card"><canvas data-el="series" height="160"></canvas></div>
 
-<h2>Cashflow pro Monat</h2>
-<div class="sub">Echtes Einkommen (Gehalt + Erstattungen + Zinsen) gegen Konsumausgaben. Interne Transfers und Vermögensbewegungen sind ausgeklammert.</div>
-<div class="card"><canvas id="cashflow" height="120"></canvas></div>
+    <h2>Cashflow pro Monat</h2>
+    <div class="sub">Einnahmen gegen Ausgaben. Interne Übertragungen zwischen eigenen Konten sind ausgeklammert.</div>
+    <div class="card"><canvas data-el="cashflow" height="120"></canvas></div>
 
-<h2>Ausgaben nach Kategorie <span class="hint" style="font-weight:400">— Klick öffnet die Einzelbuchungen</span></h2>
-<div class="grid two">
-  <div class="card"><canvas id="catdough" height="200"></canvas></div>
-  <div class="card"><div id="cattable"></div></div>
-</div>
+    <h2>Ausgaben nach Kategorie <span class="hint" style="font-weight:400">— Klick öffnet die Einzelbuchungen</span></h2>
+    <div class="grid two">
+      <div class="card"><canvas data-el="dough" height="200"></canvas></div>
+      <div class="card"><div data-el="cattable"></div></div>
+    </div>
 
-<h2 id="detail">🔍 Einzelbuchungen</h2>
-<div class="card">
-  <div class="controls">
-    <span class="hint">Konto:</span><select id="facct"></select>
-    <span class="hint">Kategorie:</span><select id="fcat"></select>
-    <span class="hint">Monat:</span><select id="fmonth"></select>
-    <span class="chip" id="resetbtn">Zurücksetzen</span>
-    <span class="hint" id="dcount" style="margin-left:auto"></span>
+    <h2 data-el="anchor">🔍 Einzelbuchungen</h2>
+    <div class="card">
+      <div class="controls">
+        <span class="hint">Kategorie:</span><select data-el="fcat"></select>
+        <span class="hint">Monat:</span><select data-el="fmonth"></select>
+        <span class="chip" data-el="reset">Zurücksetzen</span>
+        <span class="hint" data-el="count" style="margin-left:auto"></span>
+      </div>
+      <div class="dwrap"><div data-el="dtable"></div></div>
+    </div>
+
+    <h2>Ausgaben pro Monat nach Kategorie</h2>
+    <div class="card"><canvas data-el="stack" height="130"></canvas></div>
   </div>
-  <div class="dwrap"><div id="dtable"></div></div>
-</div>
+</template>
 
-<h2>Ausgaben pro Monat nach Kategorie</h2>
-<div class="card"><canvas id="catstack" height="130"></canvas></div>
+<template id="tpl-consolidated">
+  <div class="tabpanel">
+    <div class="kpibar"><div class="grid kpis" data-el="kpis"></div></div>
+    <div class="note-box" data-el="caption"></div>
 
-<h2>Abos & Versicherungen</h2>
-<div class="sub">Wiederkehrende Abbuchungen – hochgerechnet auf 12 Monate.</div>
-<div class="card"><div id="subtable"></div></div>
+    <h2>Konten im Überblick</h2>
+    <div class="grid accts" data-el="acards"></div>
 
-<h2>Budget-Vorschlag 2026</h2>
-<div class="sub">Abgeleitet aus den Monatsdurchschnitten 2025. Fixkosten sind kaum beeinflussbar, variable Kosten sind dein Hebel.</div>
-<div class="grid two">
-  <div class="card"><canvas id="budgetchart" height="220"></canvas></div>
-  <div class="card"><div id="budgettable"></div></div>
-</div>
-<div class="note-box" id="budgetnote"></div>
-</div><!-- /tab-meine -->
+    <h2>Cashflow pro Monat</h2>
+    <div class="sub">Gemeinsames Einkommen gegen gemeinsame Ausgaben aller Konten.</div>
+    <div class="card"><canvas data-el="cashflow" height="120"></canvas></div>
 
-<div id="tab-gemeinschaft" class="tabpanel">
-<div class="kpibar"><div class="grid kpis" id="jkpis"></div></div>
-<div class="note-box" id="jcaveat"></div>
+    <h2>Ausgaben nach Kategorie <span class="hint" style="font-weight:400">— Klick öffnet die Einzelbuchungen</span></h2>
+    <div class="grid two">
+      <div class="card"><canvas data-el="dough" height="200"></canvas></div>
+      <div class="card"><div data-el="cattable"></div></div>
+    </div>
 
-<h2>Konto & Beitragsaufteilung</h2>
-<div class="grid split">
-  <div class="card acard"><div class="anm">👨‍👩‍👧 Gemeinschaftskonto</div><div class="aib" id="jacctib"></div>
-   <div class="abal" id="jacctbal"></div><div class="hint">Stand 31.12.2025</div>
-   <div class="arow"><span>Δ 2025</span><span id="jacctnet"></span></div>
-   <div class="arow"><span>Stand 01.06.2026</span><span id="jacctnow"></span></div>
-   <div id="jsplitnote" style="margin-top:14px"></div>
+    <h2 data-el="anchor">🔍 Einzelbuchungen</h2>
+    <div class="card">
+      <div class="controls">
+        <span class="hint">Konto:</span><select data-el="facct"></select>
+        <span class="hint">Kategorie:</span><select data-el="fcat"></select>
+        <span class="hint">Monat:</span><select data-el="fmonth"></select>
+        <span class="chip" data-el="reset">Zurücksetzen</span>
+        <span class="hint" data-el="count" style="margin-left:auto"></span>
+      </div>
+      <div class="dwrap"><div data-el="dtable"></div></div>
+    </div>
+
+    <h2>Ausgaben pro Monat nach Kategorie</h2>
+    <div class="card"><canvas data-el="stack" height="130"></canvas></div>
   </div>
-  <div class="card"><canvas id="jsplitchart" height="200"></canvas></div>
-</div>
-
-<h2>Cashflow pro Monat <span class="hint" style="font-weight:400">— Einzahlungen (Sina/Hendrik/extern) gegen Ausgaben</span></h2>
-<div class="card"><canvas id="jcashflow" height="120"></canvas></div>
-
-<h2>Ausgaben nach Kategorie <span class="hint" style="font-weight:400">— Klick öffnet die Einzelbuchungen</span></h2>
-<div class="grid two">
-  <div class="card"><canvas id="jcatdough" height="200"></canvas></div>
-  <div class="card"><div id="jcattable"></div></div>
-</div>
-
-<h2 id="jdetail">🔍 Einzelbuchungen Gemeinschaftskonto</h2>
-<div class="card">
-  <div class="controls">
-    <span class="hint">Kategorie:</span><select id="jfcat"></select>
-    <span class="hint">Monat:</span><select id="jfmonth"></select>
-    <span class="chip" id="jreset">Zurücksetzen</span>
-    <span class="hint" id="jdcount" style="margin-left:auto"></span>
-  </div>
-  <div class="dwrap"><div id="jdtable"></div></div>
-</div>
-
-<h2>Ausgaben pro Monat nach Kategorie</h2>
-<div class="card"><canvas id="jcatstack" height="130"></canvas></div>
-</div><!-- /tab-gemeinschaft -->
-
-<div id="tab-haushalt" class="tabpanel">
-<div class="kpibar"><div class="grid kpis" id="ckpis"></div></div>
-<div class="note-box" id="ccaveat"></div>
-
-<h2>Haushaltseinkommen — wer trägt wie viel bei</h2>
-<div class="grid split">
-  <div class="card"><canvas id="cincchart" height="200"></canvas></div>
-  <div class="card"><div id="cinctable"></div></div>
-</div>
-
-<h2>Cashflow pro Monat <span class="hint" style="font-weight:400">— gemeinsames Einkommen gegen gemeinsame Ausgaben</span></h2>
-<div class="card"><canvas id="ccashflow" height="120"></canvas></div>
-
-<h2>Gemeinsame Ausgaben nach Kategorie <span class="hint" style="font-weight:400">— Klick öffnet die Einzelbuchungen</span></h2>
-<div class="grid two">
-  <div class="card"><canvas id="ccatdough" height="200"></canvas></div>
-  <div class="card"><div id="ccattable"></div></div>
-</div>
-
-<h2 id="cdetail">🔍 Einzelbuchungen Haushalt gesamt</h2>
-<div class="card">
-  <div class="controls">
-    <span class="hint">Quelle:</span><select id="cfsrc"></select>
-    <span class="hint">Kategorie:</span><select id="cfcat"></select>
-    <span class="hint">Monat:</span><select id="cfmonth"></select>
-    <span class="chip" id="creset">Zurücksetzen</span>
-    <span class="hint" id="cdcount" style="margin-left:auto"></span>
-  </div>
-  <div class="dwrap"><div id="cdtable"></div></div>
-</div>
-
-<h2>Ausgaben pro Monat nach Kategorie</h2>
-<div class="card"><canvas id="ccatstack" height="130"></canvas></div>
-</div><!-- /tab-haushalt -->
+</template>
 
 <div class="foot" id="foot"></div>
