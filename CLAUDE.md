@@ -35,3 +35,12 @@ If the model is tempted to ask "is this OK?" mid-autopilot for anything else, th
 - **Main branch:** the `protect main` ruleset requires a PR (0 approvals needed, model self-merges)
 - **Frozen UI:** `public/dashboard-*.{js,css,html}` is the approved view — never modify without explicit user instruction
 - **Defense-in-depth on data:** every account-scoped Supabase query has explicit `.eq('user_id', user.id)`, never relying solely on RLS
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
