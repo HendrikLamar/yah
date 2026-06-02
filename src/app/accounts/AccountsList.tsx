@@ -1,8 +1,10 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Account } from '@/lib/types';
+import type { Account, SharedAccountCard } from '@/lib/types';
 import { renameAccount } from './actions';
+import Members from './Members';
+import InviteForm from './InviteForm';
 
 const TYPE_LABEL: Record<Account['account_type'], string> = {
   giro: 'Girokonto', savings: 'Tagesgeld / Sparen', joint: 'Gemeinschaftskonto',
@@ -10,11 +12,14 @@ const TYPE_LABEL: Record<Account['account_type'], string> = {
 const eur = (cents: number | null) =>
   ((cents ?? 0) / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 
-function AccountRow({ account }: { account: Account }) {
+function AccountRow({ card, currentUserId }: { card: SharedAccountCard; currentUserId: string }) {
   const router = useRouter();
+  const { account, viewerRole, members, pending } = card;
   const [name, setName] = useState(account.display_name ?? '');
-  const [pending, start] = useTransition();
+  const [saving, start] = useTransition();
   const [saved, setSaved] = useState(false);
+  const shared = (account.member_count ?? 1) > 1;
+  const isOwner = viewerRole === 'owner';
 
   function save() {
     setSaved(false);
@@ -29,12 +34,14 @@ function AccountRow({ account }: { account: Account }) {
     <div style={row}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <strong>{account.name}</strong>
-        <span style={account.is_joint ? badgeShared : badgePrivate}>
-          {account.is_joint ? '👥 geteilt' : '🔒 privat'}
+        <span style={shared ? badgeShared : badgePrivate}>
+          {shared ? '👥 geteilt' : '🔒 privat'}
         </span>
         <span style={{ color: '#8b98a5', fontSize: 13 }}>{TYPE_LABEL[account.account_type]}</span>
+        {!isOwner && <span style={{ color: '#8b98a5', fontSize: 13 }}>· geteilt mit dir</span>}
         <span style={{ marginLeft: 'auto', fontWeight: 600 }}>{eur(account.balance_cents)}</span>
       </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
         <input
           aria-label={`Anzeigename für ${account.name}`}
@@ -44,26 +51,35 @@ function AccountRow({ account }: { account: Account }) {
           onChange={(e) => { setName(e.target.value); setSaved(false); }}
           style={input}
         />
-        <button onClick={save} disabled={pending} style={btn}>
-          {pending ? '…' : 'Speichern'}
+        <button onClick={save} disabled={saving} style={btn}>
+          {saving ? '…' : 'Speichern'}
         </button>
-        {saved && !pending && <span style={{ color: '#51cf66', fontSize: 13 }}>gespeichert</span>}
+        {saved && !saving && <span style={{ color: '#51cf66', fontSize: 13 }}>gespeichert</span>}
       </div>
+
+      <Members
+        accountId={account.id}
+        viewerRole={viewerRole}
+        currentUserId={currentUserId}
+        members={members}
+        pending={pending}
+      />
+      {isOwner && <InviteForm accountId={account.id} />}
     </div>
   );
 }
 
-export default function AccountsList({ accounts }: { accounts: Account[] }) {
-  if (!accounts.length) {
+export default function AccountsList({ cards, currentUserId }: { cards: SharedAccountCard[]; currentUserId: string }) {
+  if (!cards.length) {
     return (
-      <div style={{ ...row, color: '#8b98a5' }}>
+      <div style={{ ...row, color: '#8b98a5', marginTop: 16 }}>
         Noch keine Konten. Verbinde eine Bank oder importiere eine CSV-Datei, dann erscheinen sie hier.
       </div>
     );
   }
   return (
     <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-      {accounts.map((a) => <AccountRow key={a.id} account={a} />)}
+      {cards.map((c) => <AccountRow key={c.account.id} card={c} currentUserId={currentUserId} />)}
     </div>
   );
 }

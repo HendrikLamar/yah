@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { getMemberAccountIds } from '@/lib/memberAccounts';
 import { parseDkbCsv } from '@/lib/dkb-csv';
 import { buildImportRows, type AccountRole, type UserRule } from '@/lib/import-dkb';
 
@@ -27,6 +28,7 @@ export async function importDkbCsv(_prev: ImportState, formData: FormData): Prom
   const mode = String(formData.get('mode') ?? 'existing');
   const partnerName = (String(formData.get('partner_name') ?? '').trim()) || null;
 
+  const memberIds = await getMemberAccountIds(db, user.id);
   let account: { id: string; iban: string | null; account_type: string; is_joint: boolean } | null = null;
 
   if (mode === 'new') {
@@ -42,14 +44,16 @@ export async function importDkbCsv(_prev: ImportState, formData: FormData): Prom
     account = ins.data;
   } else {
     const id = String(formData.get('account_id') ?? '');
-    if (!id) return { ok: false, message: 'Bitte ein Zielkonto wählen.' };
+    if (!id || !memberIds.includes(id)) return { ok: false, message: 'Zielkonto nicht gefunden.' };
     const sel = await db.from('accounts').select('id, iban, account_type, is_joint')
-      .eq('id', id).eq('user_id', user.id).single();
+      .eq('id', id).single();
     if (sel.error || !sel.data) return { ok: false, message: 'Zielkonto nicht gefunden.' };
     account = sel.data;
   }
 
-  const { data: allAccounts } = await db.from('accounts').select('iban').eq('user_id', user.id);
+  const { data: allAccounts } = memberIds.length
+    ? await db.from('accounts').select('iban').in('id', memberIds)
+    : { data: [] as { iban: string | null }[] };
   const ownIbans = new Set<string>(
     (allAccounts ?? []).map((a) => a.iban).filter((x): x is string => !!x && x !== account!.iban),
   );
@@ -70,10 +74,13 @@ export async function importDkbCsv(_prev: ImportState, formData: FormData): Prom
   if (error) return { ok: false, message: `Import fehlgeschlagen: ${error.message}` };
 
   if (parse.balanceCents != null) {
+    // Balance refresh is governed by the owner-only accounts UPDATE policy; a
+    // non-owner member's import still inserts transactions but won't move the
+    // shared balance (it's maintained by the account owner).
     await db.from('accounts').update({
       balance_cents: parse.balanceCents,
       balance_at: parse.balanceDate ? new Date(parse.balanceDate).toISOString() : new Date().toISOString(),
-    }).eq('id', account.id).eq('user_id', user.id);
+    }).eq('id', account.id);
   }
 
   revalidatePath('/dashboard');

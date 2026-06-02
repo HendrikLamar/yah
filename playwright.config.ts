@@ -8,7 +8,9 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- -p 5187',
     url: 'http://localhost:5187/login',
-    reuseExistingServer: false,
+    // Reuse a dev server already running on 5187 (the project's dev port, chosen
+    // to dodge the Docker-held 3000/3100). In CI there's none, so start one.
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
 });
