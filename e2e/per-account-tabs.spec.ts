@@ -22,8 +22,10 @@ const admin = createClient(
 );
 
 const email = `e2e+tabs${Date.now()}@yah-itest.local`;
+const coEmail = `e2e+tabsco${Date.now()}@yah-itest.local`;
 const password = 'Test-Password-123!';
 let userId = '';
+let coUserId = '';
 
 type AcctOpts = { name: string; account_type?: 'giro' | 'savings' | 'joint'; is_joint?: boolean; balance_cents?: number };
 async function seedAccount(o: AcctOpts): Promise<string> {
@@ -59,11 +61,24 @@ test.beforeAll(async () => {
   const r = await admin.auth.admin.createUser({ email, password, email_confirm: true });
   if (r.error) throw r.error;
   userId = r.data.user!.id;
+  // A co-member used to make an account genuinely shared (member_count > 1).
+  const co = await admin.auth.admin.createUser({ email: coEmail, password, email_confirm: true });
+  if (co.error) throw co.error;
+  coUserId = co.data.user!.id;
 });
 
 test.afterAll(async () => {
   if (userId) await admin.auth.admin.deleteUser(userId);
+  if (coUserId) await admin.auth.admin.deleteUser(coUserId);
 });
+
+// Add a second member so member_count > 1 — the dashboard derives the shared
+// badge from membership count (not is_joint), per the account-sharing model.
+async function addCoMember(accountId: string) {
+  const { error } = await admin.from('account_members')
+    .insert({ account_id: accountId, user_id: coUserId, role: 'member' });
+  if (error) throw error;
+}
 
 test.beforeEach(async () => {
   await clearAccounts();
@@ -110,6 +125,7 @@ t('two accounts render a tab each plus a consolidated household tab', async ({ p
 
   const giro = await seedAccount({ name: 'Girokonto', account_type: 'giro' });
   const joint = await seedAccount({ name: 'Gemeinschaftskonto', account_type: 'joint', is_joint: true });
+  await addCoMember(joint); // genuinely shared → member_count > 1
   await seedTx(giro, [
     { d: '2025-01-31', cents: 300000, cat: 'Einnahmen · Gehalt' },
     { d: '2025-01-15', cents: -4250, cat: 'Lebensmittel & Drogerie', cp: 'REWE' },
@@ -123,7 +139,7 @@ t('two accounts render a tab each plus a consolidated household tab', async ({ p
   await expect(page.locator('.tabbtn')).toHaveCount(3);
   await expect(page.getByRole('button', { name: /Haushalt gesamt/ })).toBeVisible();
 
-  // joint account tab shows a shared badge; the giro tab does not
+  // the shared account tab shows a shared badge; the private giro tab does not
   await page.getByRole('button', { name: /Gemeinschaftskonto/ }).click();
   await expect(page.locator('.tabpanel.show .shared-badge')).toBeVisible();
   await page.getByRole('button', { name: /Girokonto/ }).click();
