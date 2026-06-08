@@ -12,13 +12,19 @@ const TYPE_LABEL: Record<Account['account_type'], string> = {
 const eur = (cents: number | null) =>
   ((cents ?? 0) / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 
-function AccountRow({ card, currentUserId }: { card: SharedAccountCard; currentUserId: string }) {
+function isShared(account: Account) {
+  return (account.member_count ?? 1) > 1;
+}
+
+function AccountDetail({ card, currentUserId, onBack }: {
+  card: SharedAccountCard; currentUserId: string; onBack: () => void;
+}) {
   const router = useRouter();
   const { account, viewerRole, members, pending } = card;
   const [name, setName] = useState(account.display_name ?? '');
   const [saving, start] = useTransition();
   const [saved, setSaved] = useState(false);
-  const shared = (account.member_count ?? 1) > 1;
+  const shared = isShared(account);
   const isOwner = viewerRole === 'owner';
 
   function save() {
@@ -31,18 +37,20 @@ function AccountRow({ card, currentUserId }: { card: SharedAccountCard; currentU
   }
 
   return (
-    <div style={row}>
+    <div className="ap-detail">
+      <button className="ap-mobile-back" onClick={onBack}>‹ Konten</button>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <strong>{account.name}</strong>
+        <strong style={{ fontSize: 18 }}>{account.name}</strong>
         <span style={shared ? badgeShared : badgePrivate}>
           {shared ? '👥 geteilt' : '🔒 privat'}
         </span>
         <span style={{ color: '#8b98a5', fontSize: 13 }}>{TYPE_LABEL[account.account_type]}</span>
         {!isOwner && <span style={{ color: '#8b98a5', fontSize: 13 }}>· geteilt mit dir</span>}
-        <span style={{ marginLeft: 'auto', fontWeight: 600 }}>{eur(account.balance_cents)}</span>
+        <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: 18 }}>{eur(account.balance_cents)}</span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
         <input
           aria-label={`Anzeigename für ${account.name}`}
           placeholder={account.name}
@@ -70,22 +78,76 @@ function AccountRow({ card, currentUserId }: { card: SharedAccountCard; currentU
 }
 
 export default function AccountsList({ cards, currentUserId }: { cards: SharedAccountCard[]; currentUserId: string }) {
+  const [selectedId, setSelectedId] = useState(cards[0]?.account.id ?? '');
+  const [view, setView] = useState<'list' | 'detail'>('list');
+
   if (!cards.length) {
     return (
-      <div style={{ ...row, color: '#8b98a5', marginTop: 16 }}>
+      <div style={{ ...emptyBox, marginTop: 16 }}>
         Noch keine Konten. Verbinde eine Bank oder importiere eine CSV-Datei, dann erscheinen sie hier.
       </div>
     );
   }
+
+  // selectedId can dangle after a remove/leave shrinks the list — fall back to the first card.
+  const active = cards.find((c) => c.account.id === selectedId) ?? cards[0];
+
   return (
-    <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-      {cards.map((c) => <AccountRow key={c.account.id} card={c} currentUserId={currentUserId} />)}
-    </div>
+    <>
+      <style>{paneCss}</style>
+      <div className="ap-pane" data-view={view}>
+        <div className="ap-list">
+          {cards.map((c) => {
+            const a = c.account;
+            const sel = a.id === active.account.id;
+            return (
+              <button
+                key={a.id}
+                className={`ap-item${sel ? ' sel' : ''}`}
+                aria-current={sel ? 'true' : undefined}
+                onClick={() => { setSelectedId(a.id); setView('detail'); }}
+              >
+                <span className="nm">
+                  {a.name}
+                  <span style={isShared(a) ? badgeShared : badgePrivate}>{isShared(a) ? '👥' : '🔒'}</span>
+                </span>
+                <span className="bl">{eur(a.balance_cents)}</span>
+              </button>
+            );
+          })}
+        </div>
+        <AccountDetail
+          key={active.account.id}
+          card={active}
+          currentUserId={currentUserId}
+          onBack={() => setView('list')}
+        />
+      </div>
+    </>
   );
 }
 
-const row: React.CSSProperties = {
-  background: '#161b22', border: '1px solid #2d3742', borderRadius: 10, padding: 16,
+const paneCss = `
+.ap-pane{display:flex;border:1px solid #2d3742;border-radius:12px;overflow:hidden;background:#161b22;min-height:380px;margin-top:16px}
+.ap-list{flex:0 0 220px;border-right:1px solid #2d3742}
+.ap-item{display:block;width:100%;text-align:left;padding:13px 14px;cursor:pointer;border:none;border-bottom:1px solid #2d3742;border-left:3px solid transparent;background:none;color:#e6edf3;font:inherit}
+.ap-item:hover{background:#1a2230}
+.ap-item.sel{background:#1a2230;border-left-color:#4dabf7}
+.ap-item .nm{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.ap-item .bl{display:block;font-size:13px;color:#8b98a5;margin-top:3px}
+.ap-detail{flex:1;padding:20px;min-width:0}
+.ap-mobile-back{display:none;background:none;border:none;color:#4dabf7;cursor:pointer;font-size:14px;padding:0;margin-bottom:12px;font-family:inherit}
+@media (max-width:720px){
+  .ap-pane{display:block}
+  .ap-list{flex:none;border-right:none}
+  .ap-pane[data-view="detail"] .ap-list{display:none}
+  .ap-pane[data-view="list"] .ap-detail{display:none}
+  .ap-pane[data-view="detail"] .ap-mobile-back{display:inline-block}
+}
+`;
+
+const emptyBox: React.CSSProperties = {
+  background: '#161b22', border: '1px solid #2d3742', borderRadius: 10, padding: 16, color: '#8b98a5',
 };
 const input: React.CSSProperties = {
   flex: 1, padding: 8, borderRadius: 8, border: '1px solid #2d3742', background: '#0f1419', color: '#e6edf3',

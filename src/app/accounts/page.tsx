@@ -56,7 +56,13 @@ export default async function AccountsPage() {
   return (
     <>
       <AppHeader email={user.email!} />
-      <main style={{ maxWidth: 820, margin: '0 auto', padding: 24, fontFamily: 'system-ui' }}>
+      <main style={{ maxWidth: 900, margin: '0 auto', padding: 24, fontFamily: 'system-ui' }}>
+        <a href="/dashboard" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, color: '#4dabf7',
+          fontSize: 14, textDecoration: 'none', marginBottom: 14,
+        }}>
+          ← Zurück zum Dashboard
+        </a>
         <h1 style={{ fontSize: 22 }}>Konten verwalten</h1>
         <p style={{ color: '#8b98a5' }}>
           Vergib einen eigenen Namen pro Konto, lade weitere Personen ein und verwalte geteilte Konten.
