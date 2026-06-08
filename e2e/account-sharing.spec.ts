@@ -71,6 +71,12 @@ async function loginUI(page: import('@playwright/test').Page, email: string) {
   await page.waitForURL('**/dashboard');
 }
 
+// Master-detail: the rename/invite/members controls only exist for the selected
+// account, so a test must pick its target in the left list before interacting.
+async function selectAccount(page: import('@playwright/test').Page, name: string) {
+  await page.locator('.ap-item', { hasText: name }).click();
+}
+
 test.beforeAll(async () => {
   if (!hasCreds) return;
   const ra = await admin.auth.admin.createUser({ email: emailA, password, email_confirm: true });
@@ -101,6 +107,7 @@ t('owner invites by email; invitee accepts, sees the shared account + transactio
   // A invites B through the UI.
   await loginUI(page, emailA);
   await page.goto('/accounts');
+  await selectAccount(page, 'Girokonto');
   await page.getByLabel('E-Mail-Adresse einladen').fill(emailB);
   await page.getByRole('button', { name: 'Einladen' }).click();
   await expect(page.getByText('Einladung gesendet.')).toBeVisible();
@@ -136,6 +143,7 @@ t('owner invites by email; invitee accepts, sees the shared account + transactio
 
   // B (non-owner) renames; the shared label updates for both.
   await pageB.goto('/accounts');
+  await selectAccount(pageB, 'Girokonto');
   await pageB.getByLabel('Anzeigename für Girokonto').fill('Unser Haushaltskonto');
   await pageB.getByRole('button', { name: 'Speichern' }).click();
   await expect(pageB.getByText('gespeichert')).toBeVisible();
@@ -151,10 +159,11 @@ t('opaque invite: inviting a non-existent email succeeds with a neutral confirma
   const accountId = await seedAccount('Opaque-Konto');
   await loginUI(page, emailA);
   await page.goto('/accounts');
-  // A may own several accounts by now; any owned invite field works — a ghost
+  // A may own several accounts by now; pick this one and invite a ghost — the
   // email resolves to no user, so no invitation row is created on any account.
-  await page.getByLabel('E-Mail-Adresse einladen').last().fill(`ghost-${stamp}@nowhere.invalid`);
-  await page.getByRole('button', { name: 'Einladen' }).last().click();
+  await selectAccount(page, 'Opaque-Konto');
+  await page.getByLabel('E-Mail-Adresse einladen').fill(`ghost-${stamp}@nowhere.invalid`);
+  await page.getByRole('button', { name: 'Einladen' }).click();
   await expect(page.getByText('Einladung gesendet.')).toBeVisible();
 
   const rows = await admin.from('account_invitations').select('id').eq('account_id', accountId);
