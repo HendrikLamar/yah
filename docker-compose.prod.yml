@@ -1,0 +1,78 @@
+# Production stack for self-hosted yah — run on one server:
+#
+#   docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d
+#
+# Public entrypoint is Caddy only (80/443, automatic HTTPS). It fronts:
+#   - https://${APP_DOMAIN}      -> app (Next.js)
+#   - https://api.${APP_DOMAIN}  -> kong (Supabase API gateway)
+# Postgres, Kong and Studio host ports are bound to 127.0.0.1 inside the
+# vendored Supabase compose. See deploy/README.md for the full runbook.
+
+include:
+  - deploy/supabase/docker-compose.yml
+
+services:
+  app:
+    container_name: yah-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined into the browser bundle at build time.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    image: yah-app:latest
+    restart: unless-stopped
+    depends_on:
+      kong:
+        condition: service_healthy
+    environment:
+      # Server-side runtime config. ANON_KEY/SERVICE_ROLE_KEY are the single
+      # source of truth in deploy/.env and are mapped to the app's var names.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      GOCARDLESS_SECRET_ID: ${GOCARDLESS_SECRET_ID}
+      GOCARDLESS_SECRET_KEY: ${GOCARDLESS_SECRET_KEY}
+      GOCARDLESS_BASE_URL: ${GOCARDLESS_BASE_URL}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+
+  caddy:
+    container_name: yah-caddy
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      CADDY_EMAIL: ${CADDY_EMAIL}
+    depends_on:
+      app:
+        condition: service_started
+
+  cron:
+    container_name: yah-cron
+    image: alpine:3.20
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      CRON_SECRET: ${CRON_SECRET}
+    volumes:
+      - ./deploy/cron/crontab:/etc/crontabs/root:ro
+    # busybox crond in the foreground; job output is redirected to PID 1 stdout.
+    command: ["crond", "-f", "-l", "8"]
+
+volumes:
+  caddy_data:
+  caddy_config:

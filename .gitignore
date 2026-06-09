@@ -18,3 +18,11 @@ playwright-report/
 graphify-out/
 .graphify_*.json
 .graphify_python
+
+# self-hosted deploy: real env + runtime volume data (keep .gitkeep placeholders)
+deploy/.env
+deploy/supabase/volumes/db/data/
+deploy/supabase/volumes/storage/*
+!deploy/supabase/volumes/storage/.gitkeep
+deploy/supabase/volumes/snippets/*
+!deploy/supabase/volumes/snippets/.gitkeep

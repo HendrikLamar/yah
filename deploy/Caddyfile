@@ -1,0 +1,17 @@
+# Reverse proxy with automatic HTTPS (Let's Encrypt). HTTP is auto-redirected
+# to HTTPS by Caddy, so auth cookies are always Secure.
+#
+# Requires env: APP_DOMAIN, CADDY_EMAIL (set in deploy/.env).
+{
+	email {$CADDY_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}
+
+api.{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy kong:8000
+}
