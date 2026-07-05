@@ -2,13 +2,14 @@
 // for the logged-in user. Use in Server Components / Route Handlers.
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { resolveSupabaseUrl } from './resolve-url';
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export function createClient() {
   const cookieStore = cookies();
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    resolveSupabaseUrl(),
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
@@ -27,7 +28,7 @@ export function createClient() {
 import { createClient as createSb } from '@supabase/supabase-js';
 export function createAdminClient() {
   return createSb(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    resolveSupabaseUrl(),
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   );
