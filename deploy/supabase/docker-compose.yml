@@ -6,7 +6,9 @@
 #     migration step hits `db` directly. Also removes its all-interfaces
 #     5432/6543 host publishes (Postgres must not be internet-exposed).
 #   - `db`, `kong`, `studio` host ports bound to 127.0.0.1 only.
-#   - dropped Kong's 8443 publish (Caddy terminates TLS).
+#   - dropped Kong's 8443 publish (TLS terminates at the shared Traefik).
+#   - `kong` joins the external `edge` network with Traefik labels so
+#     https://api.${APP_DOMAIN} routes to it; nothing else is edge-exposed.
 #   - top-level `name:` removed so this merges cleanly under the `include:` in
 #     the root ../../docker-compose.prod.yml.
 
@@ -77,6 +79,14 @@ services:
       default:
         aliases:
           - api-gw
+      edge: {}
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.yah-api.rule: Host(`api.${APP_DOMAIN}`)
+      traefik.http.routers.yah-api.entrypoints: websecure
+      traefik.http.routers.yah-api.tls.certresolver: cloudflare
+      traefik.http.services.yah-api.loadbalancer.server.port: "8000"
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 5s
@@ -85,9 +95,9 @@ services:
     depends_on:
       studio:
         condition: service_healthy
-    # Localhost only — public traffic reaches Kong through Caddy (api.${APP_DOMAIN}),
-    # which talks to `kong:8000` over the compose network. The host publish is just
-    # for local smoke tests / debugging. TLS is terminated at Caddy, so no 8443.
+    # Host publish is localhost-only, for smoke tests / debugging. Public
+    # traffic reaches Kong via Traefik on the `edge` network (api.${APP_DOMAIN});
+    # TLS is terminated at Traefik, so no 8443.
     ports:
       - 127.0.0.1:${KONG_HTTP_PORT:-8000}:8000/tcp
     volumes:
@@ -536,3 +546,9 @@ services:
 volumes:
   db-config:
   deno-cache:
+
+networks:
+  # Shared with Traefik. Declared here too because `include:` validates each
+  # file standalone before merging with the root compose file.
+  edge:
+    external: true

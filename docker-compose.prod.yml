@@ -1,12 +1,14 @@
-# Production stack for self-hosted yah — run on one server:
+# Production stack for self-hosted yah — lives in /opt/yah on the shared
+# server, deployed by CI (.github/workflows/deploy.yml):
 #
-#   docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d
+#   IMAGE_TAG=<sha> docker compose --env-file .env -f docker-compose.prod.yml up -d
 #
-# Public entrypoint is Caddy only (80/443, automatic HTTPS). It fronts:
-#   - https://${APP_DOMAIN}      -> app (Next.js)
-#   - https://api.${APP_DOMAIN}  -> kong (Supabase API gateway)
-# Postgres, Kong and Studio host ports are bound to 127.0.0.1 inside the
-# vendored Supabase compose. See deploy/README.md for the full runbook.
+# TLS terminates at the tmh-owned Traefik (network `edge`), which routes:
+#   - https://${APP_DOMAIN}      -> app:3000  (Next.js)
+#   - https://api.${APP_DOMAIN}  -> kong:8000 (Supabase API gateway)
+# Only `app` and `kong` join `edge`; every other service stays on this stack's
+# private default network. Postgres, Kong and Studio host ports are bound to
+# 127.0.0.1 inside the vendored Supabase compose. Full runbook: deploy/README.md.
 
 include:
   - deploy/supabase/docker-compose.yml
@@ -22,42 +24,37 @@ services:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
-    image: yah-app:latest
+    # CI builds and pushes this tag; `build:` stays for local/dev image builds.
+    image: ghcr.io/hendriklamar/yah:${IMAGE_TAG:?set IMAGE_TAG to a commit sha}
     restart: unless-stopped
     depends_on:
       kong:
         condition: service_healthy
+    networks:
+      - default
+      - edge
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: edge
+      traefik.http.routers.yah-app.rule: Host(`${APP_DOMAIN}`)
+      traefik.http.routers.yah-app.entrypoints: websecure
+      traefik.http.routers.yah-app.tls.certresolver: cloudflare
+      traefik.http.services.yah-app.loadbalancer.server.port: "3000"
     environment:
       # Server-side runtime config. ANON_KEY/SERVICE_ROLE_KEY are the single
-      # source of truth in deploy/.env and are mapped to the app's var names.
+      # source of truth in /opt/yah/.env and are mapped to the app's var names.
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      # Server-side Supabase calls go straight to Kong over the compose
+      # network instead of hairpinning through the public edge.
+      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       GOCARDLESS_SECRET_ID: ${GOCARDLESS_SECRET_ID}
       GOCARDLESS_SECRET_KEY: ${GOCARDLESS_SECRET_KEY}
       GOCARDLESS_BASE_URL: ${GOCARDLESS_BASE_URL}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       CRON_SECRET: ${CRON_SECRET}
-
-  caddy:
-    container_name: yah-caddy
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN}
-      CADDY_EMAIL: ${CADDY_EMAIL}
-    depends_on:
-      app:
-        condition: service_started
 
   cron:
     container_name: yah-cron
@@ -73,6 +70,7 @@ services:
     # busybox crond in the foreground; job output is redirected to PID 1 stdout.
     command: ["crond", "-f", "-l", "8"]
 
-volumes:
-  caddy_data:
-  caddy_config:
+networks:
+  # Shared with Traefik (created once: `docker network create edge`).
+  edge:
+    external: true

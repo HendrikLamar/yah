@@ -1,0 +1,88 @@
+# CI/CD: every push to main runs tests, builds the app image, pushes it to
+# GHCR and deploys it to the production server. The deploy SSH key is locked
+# to a forced command (/opt/yah/bin/ssh-deploy-wrapper.sh) that permits only
+# rsync under /opt/yah/ and `IMAGE_TAG=<sha> /opt/yah/scripts/deploy.sh`.
+# Playwright e2e stays local (run pre-merge); CI gates on vitest + typecheck +
+# the Docker build itself.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  DEPLOY_HOST: 167.233.85.191
+  DEPLOY_USER: igor
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  build-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/hendriklamar/yah:${{ github.sha }}
+          # NEXT_PUBLIC_* are inlined into the browser bundle at build time.
+          # The anon key is a public-by-design JWT (RLS enforced server-side).
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=https://api.yah.thatsmyhuman.ai
+            NEXT_PUBLIC_APP_URL=https://yah.thatsmyhuman.ai
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up SSH
+        # Host key pinned (not ssh-keyscan) so a first-contact MITM can't
+        # intercept the deploy connection.
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "$DEPLOY_HOST ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBDBTr6p8lsMAeXOFOJkTtOL/3jairXy2VU8tHUF1HFF" >> ~/.ssh/known_hosts
+      - name: Sync deploy artifacts
+        # No --delete into deploy/supabase/: on the server that tree also holds
+        # the live Postgres data dir (volumes/db/data) and storage files.
+        run: |
+          RSH="ssh -i ~/.ssh/deploy_key"
+          rsync -az --delete -e "$RSH" deploy/scripts/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/scripts/"
+          rsync -az --delete -e "$RSH" supabase/migrations/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/supabase/migrations/"
+          rsync -az -e "$RSH" deploy/supabase/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/deploy/supabase/"
+          rsync -az -e "$RSH" docker-compose.prod.yml "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/docker-compose.prod.yml"
+      - name: Deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+            "IMAGE_TAG=${{ github.sha }} /opt/yah/scripts/deploy.sh"
