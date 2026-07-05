@@ -81,6 +81,7 @@ jobs:
           rsync -az --delete -e "$RSH" deploy/scripts/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/scripts/"
           rsync -az --delete -e "$RSH" supabase/migrations/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/supabase/migrations/"
           rsync -az -e "$RSH" deploy/supabase/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/deploy/supabase/"
+          rsync -az -e "$RSH" deploy/cron/ "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/deploy/cron/"
           rsync -az -e "$RSH" docker-compose.prod.yml "$DEPLOY_USER@$DEPLOY_HOST:/opt/yah/docker-compose.prod.yml"
       - name: Deploy
         run: |

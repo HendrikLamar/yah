@@ -95,10 +95,11 @@ bash gen-secrets.sh > /opt/yah/.env && chmod 600 /opt/yah/.env
 #    command="/opt/yah/bin/ssh-deploy-wrapper.sh",no-pty,no-agent-forwarding,no-X11-forwarding,no-port-forwarding
 #    private key -> GitHub secret DEPLOY_SSH_KEY, then delete local copies.
 
-# 5. Wrapper + supabase CLI into root-owned bin/
+# 5. Wrapper + supabase CLI into root-owned bin/. Extract the WHOLE tarball:
+#    it ships `supabase` (shim) + `supabase-go`, and the shim needs its sibling.
 sudo cp ssh-deploy-wrapper.sh /opt/yah/bin/ && sudo chown -R root:root /opt/yah/bin
-curl -fsSL https://github.com/supabase/cli/releases/download/v2.109.0/supabase_linux_amd64.tar.gz \
-  | sudo tar -xz -C /opt/yah/bin supabase
+curl -fsSL https://github.com/supabase/cli/releases/download/v2.109.0/supabase_2.109.0_linux_amd64.tar.gz \
+  | sudo tar -xz -C /opt/yah/bin
 sudo chmod 755 /opt/yah/bin/*
 
 # 6. Nightly backup (03:00, offset from tmh's 02:00)
