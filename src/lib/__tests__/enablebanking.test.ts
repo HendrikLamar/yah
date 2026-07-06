@@ -2,7 +2,7 @@
 // builder and the response-shape mappers used by sync.
 import { describe, it, expect, beforeAll } from 'vitest';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
-import { buildJwt, mapTransaction, pickBalanceCents } from '../enablebanking';
+import { buildJwt, mapTransaction, mapTransactions, pickBalanceCents } from '../enablebanking';
 
 const b64urlToJson = (s: string) =>
   JSON.parse(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
@@ -86,10 +86,13 @@ describe('mapTransaction', () => {
     expect(m.amount_cents).toBe(-4250);
   });
 
-  it('prefers entry_reference as dedupe id, falls back to transaction_id', () => {
-    expect(mapTransaction(base, none)!.external_transaction_id).toBe('ref-1');
+  it('builds the dedupe id from entry_reference plus a content hash, falling back to transaction_id', () => {
+    expect(mapTransaction(base, none)!.external_transaction_id).toMatch(/^ref-1_[a-z0-9]+$/);
     const m = mapTransaction({ ...base, entry_reference: undefined, transaction_id: 'tx-9' }, none)!;
-    expect(m.external_transaction_id).toBe('tx-9');
+    expect(m.external_transaction_id).toMatch(/^tx-9_[a-z0-9]+$/);
+    // stable for identical input
+    expect(mapTransaction(base, none)!.external_transaction_id)
+      .toBe(mapTransaction({ ...base }, none)!.external_transaction_id);
   });
 
   it('returns null without any dedupe id or without a booking date', () => {
@@ -130,12 +133,82 @@ describe('mapTransaction', () => {
   });
 });
 
+// Enable Banking's own synthetic bank data shows entry_reference is a
+// scheme-level reference, NOT a transaction identity: one MobilePay reference
+// covered 44 distinct payments. The dedupe key must therefore incorporate the
+// transaction content, or upsert(ignoreDuplicates) silently drops real rows.
+describe('mapTransactions — dedupe keys', () => {
+  const none = new Set<string>();
+  // Shapes taken from Enable Banking's DK-Danske_Bank synthetic dataset:
+  // shared entry_reference, null creditor/debtor, string amounts.
+  const mobilePay = (amount: string, date: string, who: string) => ({
+    entry_reference: '3845245274',
+    transaction_amount: { currency: 'DKK', amount },
+    creditor: null, creditor_account: null, debtor: null, debtor_account: null,
+    credit_debit_indicator: 'CRDT', status: 'BOOK',
+    booking_date: date, value_date: date,
+    remittance_information: [`MobilePay: ${who}`],
+  });
+
+  it('gives distinct keys to different transactions sharing an entry_reference', () => {
+    const out = mapTransactions([
+      mobilePay('200.0', '2020-09-24', 'Emma Nielsen'),
+      mobilePay('24.0', '2020-09-25', 'Christina Nielsen'),
+      mobilePay('4.0', '2020-09-25', 'Clara Mepris'),
+    ], none);
+    expect(out).toHaveLength(3);
+    expect(new Set(out.map((m) => m.external_transaction_id)).size).toBe(3);
+  });
+
+  it('gives distinct, order-independent keys to fully identical rows', () => {
+    const twin = () => mobilePay('10.0', '2020-09-25', 'Emma Nielsen');
+    const a = mapTransactions([twin(), twin()], none);
+    const b = mapTransactions([twin(), twin()].reverse(), none);
+    expect(a).toHaveLength(2);
+    expect(new Set(a.map((m) => m.external_transaction_id)).size).toBe(2);
+    // same key SET regardless of the order the API returned them in
+    expect(new Set(a.map((m) => m.external_transaction_id)))
+      .toEqual(new Set(b.map((m) => m.external_transaction_id)));
+  });
+
+  it('is idempotent: re-mapping the same batch yields the same keys', () => {
+    const batch = [
+      mobilePay('200.0', '2020-09-24', 'Emma Nielsen'),
+      mobilePay('200.0', '2020-09-24', 'Emma Nielsen'),
+      mobilePay('4.0', '2020-09-25', 'Clara Mepris'),
+    ];
+    const a = mapTransactions(batch, none).map((m) => m.external_transaction_id).sort();
+    const b = mapTransactions(batch, none).map((m) => m.external_transaction_id).sort();
+    expect(a).toEqual(b);
+  });
+
+  it('drops unmappable rows but keeps the rest', () => {
+    const out = mapTransactions([
+      mobilePay('200.0', '2020-09-24', 'Emma Nielsen'),
+      { ...mobilePay('1.0', '2020-09-24', 'X'), entry_reference: undefined },
+    ], none);
+    expect(out).toHaveLength(1);
+  });
+
+  it('maps the all-null-counterparty shape from real bank data', () => {
+    const [m] = mapTransactions([mobilePay('200.0', '2020-09-24', 'Emma Nielsen')], none);
+    expect(m.amount_cents).toBe(20000);
+    expect(m.currency).toBe('DKK');
+    expect(m.counterparty).toBe('');
+    expect(m.counterparty_iban).toBeNull();
+    expect(m.purpose).toBe('MobilePay: Emma Nielsen');
+  });
+});
+
 describe('pickBalanceCents', () => {
   const bal = (type: string, amount: string) => ({ balance_type: type, balance_amount: { amount } });
 
-  it('prefers CLBD, then ITAV, then XPCD, else the first entry', () => {
+  it('prefers CLBD, then ITAV, then ITBD, then XPCD, else the first entry', () => {
     expect(pickBalanceCents([bal('XPCD', '3.00'), bal('CLBD', '1.00'), bal('ITAV', '2.00')])).toBe(100);
     expect(pickBalanceCents([bal('XPCD', '3.00'), bal('ITAV', '2.00')])).toBe(200);
+    // shape seen in Enable Banking's synthetic bank data: ITAV/ITBD/OTHR
+    expect(pickBalanceCents([bal('ITAV', '2.00'), bal('ITBD', '4.00'), bal('OTHR', '9.99')])).toBe(200);
+    expect(pickBalanceCents([bal('ITBD', '4.00'), bal('XPCD', '3.00')])).toBe(400);
     expect(pickBalanceCents([bal('OTHR', '9.99'), bal('XPCD', '3.00')])).toBe(300);
     expect(pickBalanceCents([bal('OTHR', '9.99')])).toBe(999);
   });
