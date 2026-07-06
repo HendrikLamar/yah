@@ -146,13 +146,30 @@ export interface MappedTransaction {
   is_internal: boolean;
 }
 
+// entry_reference is NOT unique per transaction: Enable Banking's own
+// synthetic bank data shares one reference across whole payment batches
+// (44 MobilePay payments under a single reference). The dedupe key is
+// therefore reference + a hash over the identifying content; fully identical
+// rows get an occurrence suffix in mapTransactions (order-independent, so
+// re-syncs upsert onto the same keys).
+function contentHash(key: string): string {
+  let h1 = 5381;        // djb2
+  let h2 = 0x811c9dc5;  // fnv-1a
+  for (let i = 0; i < key.length; i++) {
+    const c = key.charCodeAt(i);
+    h1 = (((h1 << 5) + h1) ^ c) >>> 0;
+    h2 = ((h2 ^ c) * 0x01000193) >>> 0;
+  }
+  return `${h1.toString(36)}${h2.toString(36)}`;
+}
+
 // Amounts are positive with the sign carried by credit_debit_indicator
 // (unlike GoCardless, whose amount was signed). Tolerate signed input by
 // normalizing via abs before applying the indicator.
 export function mapTransaction(tx: any, ownIbans: Set<string>): MappedTransaction | null {
-  const externalId = tx.entry_reference ?? tx.transaction_id;
+  const reference = tx.entry_reference ?? tx.transaction_id;
   const bookingDate = tx.booking_date;
-  if (!externalId || !bookingDate) return null;
+  if (!reference || !bookingDate) return null;
 
   const rawCents = toCents(tx.transaction_amount?.amount ?? '0');
   const indicator = tx.credit_debit_indicator;
@@ -161,21 +178,47 @@ export function mapTransaction(tx: any, ownIbans: Set<string>): MappedTransactio
     : rawCents;
 
   const counterpartyIban = tx.creditor_account?.iban ?? tx.debtor_account?.iban ?? null;
+  const counterparty = tx.creditor?.name ?? tx.debtor?.name ?? '';
+  const purpose = (tx.remittance_information ?? []).join(' ');
+  const currency = tx.transaction_amount?.currency ?? 'EUR';
+
+  const hash = contentHash(
+    [bookingDate, amountCents, currency, counterparty, purpose, counterpartyIban ?? ''].join('|'),
+  );
 
   return {
-    external_transaction_id: externalId,
+    external_transaction_id: `${reference}_${hash}`,
     booking_date: bookingDate,
     value_date: tx.value_date ?? bookingDate,
     amount_cents: amountCents,
-    currency: tx.transaction_amount?.currency ?? 'EUR',
-    counterparty: tx.creditor?.name ?? tx.debtor?.name ?? '',
-    purpose: (tx.remittance_information ?? []).join(' '),
+    currency,
+    counterparty,
+    purpose,
     counterparty_iban: counterpartyIban,
     is_internal: !!counterpartyIban && ownIbans.has(counterpartyIban),
   };
 }
 
-const BALANCE_PREFERENCE = ['CLBD', 'ITAV', 'XPCD'];
+// Batch mapper used by sync: adds occurrence suffixes so fully identical
+// rows (same reference AND same content) stay distinct. Suffixes are
+// assigned per identical-content group, so the key SET is independent of
+// the order the API returned the rows in — re-syncs stay idempotent.
+// `raw` carries the original payload for the transactions.raw jsonb column.
+export function mapTransactions(txs: any[], ownIbans: Set<string>): (MappedTransaction & { raw: any })[] {
+  const seen = new Map<string, number>();
+  const out: (MappedTransaction & { raw: any })[] = [];
+  for (const tx of txs) {
+    const m = mapTransaction(tx, ownIbans);
+    if (!m) continue;
+    const occ = seen.get(m.external_transaction_id) ?? 0;
+    seen.set(m.external_transaction_id, occ + 1);
+    if (occ > 0) m.external_transaction_id = `${m.external_transaction_id}_${occ}`;
+    out.push({ ...m, raw: tx });
+  }
+  return out;
+}
+
+const BALANCE_PREFERENCE = ['CLBD', 'ITAV', 'ITBD', 'XPCD'];
 
 export function pickBalanceCents(balances: any[]): number | null {
   if (!balances?.length) return null;

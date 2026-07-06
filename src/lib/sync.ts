@@ -2,7 +2,7 @@
 // Enable Banking, categorise them, and upsert into Postgres (deduped by
 // external_transaction_id). Shared by the user-triggered route and the
 // in-stack cron job.
-import { enablebanking, mapTransaction, pickBalanceCents } from './enablebanking';
+import { enablebanking, mapTransactions, pickBalanceCents } from './enablebanking';
 import { classifyPersonal } from './categorize';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -47,9 +47,8 @@ export async function syncConnection(db: SupabaseClient, userId: string, connect
       // booked only; tolerate responses that omit status entirely
       const booked = transactions.filter((t) => !t.status || t.status === 'BOOK');
 
-      for (const t of booked) {
-        const m = mapTransaction(t, ownIbans);
-        if (!m) continue;
+      // batch-mapped: occurrence suffixes for identical rows need the full list
+      for (const m of mapTransactions(booked, ownIbans)) {
         const { category, group } = classifyPersonal({
           counterparty: m.counterparty, purpose: m.purpose,
           amountCents: m.amount_cents, isInternal: m.is_internal,
@@ -57,7 +56,7 @@ export async function syncConnection(db: SupabaseClient, userId: string, connect
 
         const { error } = await db.from('transactions').upsert({
           user_id: userId, account_id: acc.id, ...m,
-          category, category_group: group, raw: t,
+          category, category_group: group,
         }, { onConflict: 'account_id,external_transaction_id', ignoreDuplicates: true });
         if (!error) inserted += 1;
       }
