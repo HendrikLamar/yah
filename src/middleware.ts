@@ -2,7 +2,7 @@
 // unauthenticated users away from /dashboard, /connect and /accounts.
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
-import { resolveSupabaseUrl } from '@/lib/supabase/resolve-url';
+import { resolveSupabaseUrl, AUTH_COOKIE_NAME } from '@/lib/supabase/resolve-url';
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -12,6 +12,7 @@ export async function middleware(req: NextRequest) {
     resolveSupabaseUrl(),
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (toSet: CookieToSet[]) => toSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options)),
