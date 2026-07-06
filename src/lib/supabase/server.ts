@@ -2,7 +2,7 @@
 // for the logged-in user. Use in Server Components / Route Handlers.
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { resolveSupabaseUrl } from './resolve-url';
+import { resolveSupabaseUrl, AUTH_COOKIE_NAME } from './resolve-url';
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -12,6 +12,7 @@ export function createClient() {
     resolveSupabaseUrl(),
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (toSet: CookieToSet[]) => {
