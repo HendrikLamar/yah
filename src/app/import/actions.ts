@@ -70,7 +70,7 @@ export async function importDkbCsv(_prev: ImportState, formData: FormData): Prom
 
   const payload = rows.map((r) => ({ ...r, user_id: user.id, account_id: account!.id, value_date: r.booking_date }));
   const { error } = await db.from('transactions')
-    .upsert(payload, { onConflict: 'account_id,gc_transaction_id', ignoreDuplicates: true });
+    .upsert(payload, { onConflict: 'account_id,external_transaction_id', ignoreDuplicates: true });
   if (error) return { ok: false, message: `Import fehlgeschlagen: ${error.message}` };
 
   if (parse.balanceCents != null) {

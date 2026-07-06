@@ -1,11 +1,10 @@
 // Core sync routine: pull transactions for one connection's accounts from
-// GoCardless, categorise them, and upsert into Postgres (deduped by
-// gc_transaction_id). Shared by the user-triggered route and the cron job.
-import { gocardless } from './gocardless';
+// Enable Banking, categorise them, and upsert into Postgres (deduped by
+// external_transaction_id). Shared by the user-triggered route and the
+// in-stack cron job.
+import { enablebanking, mapTransaction, pickBalanceCents } from './enablebanking';
 import { classifyPersonal } from './categorize';
 import type { SupabaseClient } from '@supabase/supabase-js';
-
-const toCents = (s: string) => Math.round(parseFloat(s) * 100);
 
 export async function syncConnection(db: SupabaseClient, userId: string, connectionId: string) {
   const log = await db.from('sync_logs')
@@ -15,43 +14,51 @@ export async function syncConnection(db: SupabaseClient, userId: string, connect
   let inserted = 0;
 
   try {
+    const { data: conn } = await db.from('bank_connections')
+      .select('id, consent_expires_at').eq('id', connectionId).eq('user_id', userId).single();
+    if (!conn) throw new Error('connection not found');
+    if (conn.consent_expires_at && new Date(conn.consent_expires_at) < new Date()) {
+      await db.from('bank_connections').update({ status: 'expired' })
+        .eq('id', conn.id).eq('user_id', userId);
+      if (logId) await db.from('sync_logs').update({
+        status: 'ok', finished_at: new Date().toISOString(), message: 'consent expired — connection marked expired, sync skipped',
+      }).eq('id', logId);
+      return { ok: true, inserted: 0, expired: true };
+    }
+
     const { data: accounts } = await db.from('accounts')
-      .select('id, gc_account_id, iban').eq('connection_id', connectionId);
+      .select('id, external_account_id, iban')
+      .eq('connection_id', connectionId).eq('user_id', userId);
+    const ownIbans = new Set((accounts ?? []).map((a: any) => a.iban).filter(Boolean));
 
     for (const acc of accounts ?? []) {
-      if (!acc.gc_account_id) continue;
+      if (!acc.external_account_id) continue;
 
       // balances (best-effort)
       try {
-        const bal = await gocardless.getBalances(acc.gc_account_id);
-        const amount = bal?.balances?.[0]?.balanceAmount?.amount;
-        if (amount != null) {
-          await db.from('accounts').update({ balance_cents: toCents(amount), balance_at: new Date().toISOString() })
-            .eq('id', acc.id);
+        const cents = pickBalanceCents(await enablebanking.getBalances(acc.external_account_id));
+        if (cents != null) {
+          await db.from('accounts').update({ balance_cents: cents, balance_at: new Date().toISOString() })
+            .eq('id', acc.id).eq('user_id', userId);
         }
       } catch { /* balances optional */ }
 
-      const tx = await gocardless.getTransactions(acc.gc_account_id);
-      const booked = tx?.transactions?.booked ?? [];
-      const ownIbans = new Set((accounts ?? []).map((a: any) => a.iban).filter(Boolean));
+      const transactions = await enablebanking.getTransactions(acc.external_account_id);
+      // booked only; tolerate responses that omit status entirely
+      const booked = transactions.filter((t) => !t.status || t.status === 'BOOK');
 
-      for (const b of booked) {
-        const amountCents = toCents(b.transactionAmount.amount);
-        const counterparty = b.creditorName ?? b.debtorName ?? '';
-        const purpose = (b.remittanceInformationUnstructured
-          ?? (b.remittanceInformationUnstructuredArray ?? []).join(' ')) ?? '';
-        const cpIban = b.creditorAccount?.iban ?? b.debtorAccount?.iban ?? null;
-        const isInternal = !!cpIban && ownIbans.has(cpIban);
-        const { category, group } = classifyPersonal({ counterparty, purpose, amountCents, isInternal });
+      for (const t of booked) {
+        const m = mapTransaction(t, ownIbans);
+        if (!m) continue;
+        const { category, group } = classifyPersonal({
+          counterparty: m.counterparty, purpose: m.purpose,
+          amountCents: m.amount_cents, isInternal: m.is_internal,
+        });
 
         const { error } = await db.from('transactions').upsert({
-          user_id: userId, account_id: acc.id,
-          gc_transaction_id: b.transactionId ?? b.internalTransactionId,
-          booking_date: b.bookingDate, value_date: b.valueDate ?? b.bookingDate,
-          amount_cents: amountCents, currency: b.transactionAmount.currency ?? 'EUR',
-          counterparty, purpose, counterparty_iban: cpIban,
-          category, category_group: group, is_internal: isInternal, raw: b,
-        }, { onConflict: 'account_id,gc_transaction_id', ignoreDuplicates: true });
+          user_id: userId, account_id: acc.id, ...m,
+          category, category_group: group, raw: t,
+        }, { onConflict: 'account_id,external_transaction_id', ignoreDuplicates: true });
         if (!error) inserted += 1;
       }
     }

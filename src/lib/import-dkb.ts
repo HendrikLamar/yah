@@ -22,7 +22,7 @@ export interface ImportRow {
   category: string;
   category_group: string;
   is_internal: boolean;
-  gc_transaction_id: string;
+  external_transaction_id: string;
 }
 
 export interface UserRule { match_field: string; pattern: string; category: string; priority: number; }
@@ -90,7 +90,7 @@ export function buildImportRows(args: {
       category,
       category_group: group,
       is_internal: isInternal,
-      gc_transaction_id: occ === 0 ? base : `${base}_${occ}`,
+      external_transaction_id: occ === 0 ? base : `${base}_${occ}`,
     };
   });
 }

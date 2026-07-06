@@ -1,6 +1,6 @@
-// GET /api/cron/sync  -> scheduled by Vercel Cron (see vercel.json, every 6h
-// = 4x/day, within GoCardless' ~4 calls/day/scope limit). Uses the service-role
-// client and iterates every linked connection across all users.
+// GET /api/cron/sync  -> hit every 6h by the in-stack cron container (banks
+// rate-limit PSD2 data access to ~4 calls/day per consent). Uses the
+// service-role client and iterates every linked connection across all users.
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { syncConnection } from '@/lib/sync';

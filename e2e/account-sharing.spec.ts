@@ -48,13 +48,13 @@ async function seedAccount(name: string): Promise<string> {
 
 async function seedTransactions(accountId: string, userId: string): Promise<number> {
   const rows = [
-    { user_id: userId, account_id: accountId, gc_transaction_id: `${accountId}-1`,
+    { user_id: userId, account_id: accountId, external_transaction_id: `${accountId}-1`,
       booking_date: '2025-06-15', amount_cents: -4250, counterparty: 'REWE SAGT DANKE',
       purpose: 'Einkauf', category: 'Lebensmittel & Drogerie', category_group: 'Konsum' },
-    { user_id: userId, account_id: accountId, gc_transaction_id: `${accountId}-2`,
+    { user_id: userId, account_id: accountId, external_transaction_id: `${accountId}-2`,
       booking_date: '2025-06-28', amount_cents: 300000, counterparty: 'ARBEITGEBER GMBH',
       purpose: 'Gehalt Juni', category: 'Einnahmen · Gehalt', category_group: 'Einnahmen' },
-    { user_id: userId, account_id: accountId, gc_transaction_id: `${accountId}-3`,
+    { user_id: userId, account_id: accountId, external_transaction_id: `${accountId}-3`,
       booking_date: '2025-06-03', amount_cents: -120000, counterparty: 'Vermieter',
       purpose: 'Miete Juni', category: 'Miete', category_group: 'Konsum' },
   ];
@@ -257,12 +257,12 @@ t('a member importing into a shared account: their transaction is visible to all
 
   // B inserts a transaction tagged with their own user_id (as an import would).
   const ins = await bClient.from('transactions').insert({
-    user_id: userB, account_id: accountId, gc_transaction_id: `${accountId}-bimport`,
+    user_id: userB, account_id: accountId, external_transaction_id: `${accountId}-bimport`,
     booking_date: '2025-07-01', amount_cents: -999, counterparty: 'B-Shop', category: 'Konsum',
   });
   expect(ins.error).toBeNull();
 
   // The owner (A) sees B's transaction.
-  const aSees = await aClient.from('transactions').select('id').eq('account_id', accountId).eq('gc_transaction_id', `${accountId}-bimport`);
+  const aSees = await aClient.from('transactions').select('id').eq('account_id', accountId).eq('external_transaction_id', `${accountId}-bimport`);
   expect(aSees.data).toHaveLength(1);
 });
