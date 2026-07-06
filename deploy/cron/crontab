@@ -1,4 +1,4 @@
 # Replaces Vercel Cron. Sync every linked bank connection every 6 hours
-# (4x/day, within GoCardless' ~4 calls/day/scope limit). Reaches the app over
+# (4x/day, within the banks' ~4 PSD2 calls/day/consent limit). Reaches the app over
 # the internal compose network only; the bearer matches the route's guard.
 0 */6 * * * wget -qO- --header="Authorization: Bearer $CRON_SECRET" http://app:3000/api/cron/sync >/proc/1/fd/1 2>&1

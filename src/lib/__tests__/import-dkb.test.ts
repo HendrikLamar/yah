@@ -27,12 +27,12 @@ describe('buildImportRows — dedup keys', () => {
   const dup = () => row({ counterparty: 'Vermieter', purpose: 'Miete', amountCents: -50000, counterpartyIban: null });
   it('gives two identical same-day rows in one batch distinct dedup keys', () => {
     const out = buildImportRows({ rows: [dup(), dup()], accountRole: 'giro', ownIbans });
-    expect(out[0].gc_transaction_id).not.toBe(out[1].gc_transaction_id);
+    expect(out[0].external_transaction_id).not.toBe(out[1].external_transaction_id);
   });
   it('is idempotent: re-importing the same batch yields the same keys', () => {
     const a = buildImportRows({ rows: [dup(), dup()], accountRole: 'giro', ownIbans });
     const b = buildImportRows({ rows: [dup(), dup()], accountRole: 'giro', ownIbans });
-    expect(a.map((r) => r.gc_transaction_id)).toEqual(b.map((r) => r.gc_transaction_id));
+    expect(a.map((r) => r.external_transaction_id)).toEqual(b.map((r) => r.external_transaction_id));
   });
 });
 
@@ -47,7 +47,7 @@ describe('buildImportRows — giro', () => {
     expect(r.category_group).toBe('Konsum');
     expect(r.is_internal).toBe(false);
     expect(r.amount_cents).toBe(-4250);
-    expect(r.gc_transaction_id).toBeTruthy();
+    expect(r.external_transaction_id).toBeTruthy();
   });
   it('flags an internal transfer to another own account', () => {
     const [r] = buildImportRows({

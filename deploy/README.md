@@ -87,7 +87,7 @@ docker network create edge
 sudo mkdir -p /opt/yah/{scripts,bin,backups,secrets,supabase/migrations,deploy/supabase}
 sudo chown -R igor:igor /opt/yah && chmod 700 /opt/yah/backups
 
-# 3. Secrets (ON THE SERVER; fill GOCARDLESS_* afterwards)
+# 3. Secrets (ON THE SERVER; fill ENABLE_BANKING_* afterwards)
 bash gen-secrets.sh > /opt/yah/.env && chmod 600 /opt/yah/.env
 
 # 4. Deploy key: ssh-keygen -t ed25519 -C yah-deploy; append the pub key to
