@@ -111,8 +111,10 @@ export const enablebanking = {
   getTransactions: async (accountUid: string, dateFrom?: string): Promise<any[]> => {
     const all: any[] = [];
     let continuationKey: string | undefined;
-    // Bounded continuation loop — runaway guard, not an expected limit.
-    for (let page = 0; page < 20; page++) {
+    // Bounded continuation loop — a runaway guard, NOT a data limit. Mock
+    // ASPSP pages in batches of 10, so full histories span hundreds of
+    // pages; the bound must comfortably exceed any real account history.
+    for (let page = 0; page < 500; page++) {
       const params = new URLSearchParams();
       if (dateFrom) params.set('date_from', dateFrom);
       if (continuationKey) params.set('continuation_key', continuationKey);
