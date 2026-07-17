@@ -1,8 +1,8 @@
 // Unit tests for the Enable Banking adapter's pure parts: the RS256 JWT
 // builder and the response-shape mappers used by sync.
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { generateKeyPairSync, createVerify } from 'node:crypto';
-import { buildJwt, mapTransaction, mapTransactions, pickBalanceCents } from '../enablebanking';
+import { buildJwt, enablebanking, mapTransaction, mapTransactions, pickBalanceCents } from '../enablebanking';
 
 const b64urlToJson = (s: string) =>
   JSON.parse(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
@@ -130,6 +130,54 @@ describe('mapTransaction', () => {
     }, none)!;
     expect(m.value_date).toBe('2026-06-15');
     expect(m.currency).toBe('EUR');
+  });
+});
+
+// Mock ASPSP pages transactions in batches of 10 (per Enable Banking docs),
+// so a full history can span hundreds of continuation pages. The loop bound
+// is a runaway guard, not a data limit — it must comfortably exceed any real
+// history (611 mock transactions = 62 pages already blew a 20-page bound).
+describe('getTransactions pagination', () => {
+  beforeAll(() => {
+    // ebFetch signs a JWT per request — give it a throwaway key
+    const { privateKey } = generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    process.env.ENABLE_BANKING_APPLICATION_ID = 'test-app-id';
+    process.env.ENABLE_BANKING_PRIVATE_KEY_B64 = Buffer.from(privateKey, 'utf8').toString('base64');
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('follows continuation_key across many pages and returns everything', async () => {
+    const PAGES = 62;
+    const fetchMock = vi.fn(async (url: string) => {
+      const key = new URL(url).searchParams.get('continuation_key');
+      const page = key ? parseInt(key, 10) : 0;
+      return {
+        ok: true, status: 200,
+        json: async () => ({
+          transactions: Array.from({ length: 10 }, (_, i) => ({ entry_reference: `p${page}-${i}` })),
+          continuation_key: page + 1 < PAGES ? String(page + 1) : null,
+        }),
+      } as any;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const all = await enablebanking.getTransactions('acc-uid');
+    expect(all).toHaveLength(PAGES * 10);
+    expect(fetchMock).toHaveBeenCalledTimes(PAGES);
+  });
+
+  it('still stops on a never-ending continuation_key (runaway guard)', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ transactions: [{ entry_reference: 'x' }], continuation_key: 'again' }),
+    } as any));
+    vi.stubGlobal('fetch', fetchMock);
+    const all = await enablebanking.getTransactions('acc-uid');
+    expect(all.length).toBeLessThanOrEqual(500);
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(500);
   });
 });
 
