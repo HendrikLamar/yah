@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { buildDashboardData } from '@/lib/buildDashboardData';
-import { getMemberAccountIds } from '@/lib/memberAccounts';
+import { getMemberships } from '@/lib/memberAccounts';
 import DashboardView from '@/components/DashboardView';
 import AppHeader from '@/components/AppHeader';
 
@@ -12,7 +12,11 @@ export default async function DashboardPage() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) redirect('/login');
 
-  const ids = await getMemberAccountIds(db, user.id);
+  // Dashboard shows only non-hidden memberships; hiding is per member and
+  // dashboard-only (sync/import/accounts keep operating on hidden accounts).
+  const memberships = await getMemberships(db, user.id);
+  const ids = memberships.filter((m) => !m.hidden).map((m) => m.account_id);
+  const allHidden = memberships.length > 0 && ids.length === 0;
 
   let accounts: any[] = [];
   let txns: any[] = [];
@@ -37,17 +41,27 @@ export default async function DashboardPage() {
         <AppHeader email={user.email!} />
         <main style={{ maxWidth: 640, margin: '12vh auto', fontFamily: 'system-ui', textAlign: 'center' }}>
         <h1>💶 Willkommen</h1>
-        <p style={{ color: '#8b98a5' }}>Noch keine Konten verbunden.</p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
-          <a href="/connect" style={{ display: 'inline-block', padding: '10px 18px',
-            background: '#4dabf7', color: '#0f1419', borderRadius: 8, fontWeight: 600, textDecoration: 'none' }}>
-            Bankkonto verbinden
-          </a>
-          <a href="/import" style={{ display: 'inline-block', padding: '10px 18px',
-            background: '#222b35', color: '#e6edf3', border: '1px solid #2d3742', borderRadius: 8, fontWeight: 600, textDecoration: 'none' }}>
-            CSV importieren
-          </a>
-        </div>
+        {allHidden ? (
+          <p style={{ color: '#8b98a5' }}>
+            Alle Konten sind ausgeblendet — unter{' '}
+            <a href="/accounts" style={{ color: '#4dabf7' }}>Konten verwalten</a>{' '}
+            kannst du sie wieder einblenden.
+          </p>
+        ) : (
+          <>
+            <p style={{ color: '#8b98a5' }}>Noch keine Konten verbunden.</p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+              <a href="/connect" style={{ display: 'inline-block', padding: '10px 18px',
+                background: '#4dabf7', color: '#0f1419', borderRadius: 8, fontWeight: 600, textDecoration: 'none' }}>
+                Bankkonto verbinden
+              </a>
+              <a href="/import" style={{ display: 'inline-block', padding: '10px 18px',
+                background: '#222b35', color: '#e6edf3', border: '1px solid #2d3742', borderRadius: 8, fontWeight: 600, textDecoration: 'none' }}>
+                CSV importieren
+              </a>
+            </div>
+          </>
+        )}
         </main>
       </>
     );

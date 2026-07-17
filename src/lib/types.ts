@@ -9,7 +9,7 @@ export interface Account {
 export type MembershipRole = 'owner' | 'member';
 
 export interface AccountMember {
-  account_id: string; user_id: string; role: MembershipRole; created_at: string;
+  account_id: string; user_id: string; role: MembershipRole; hidden: boolean; created_at: string;
 }
 export interface AccountInvitation {
   id: string; account_id: string; inviter_id: string; invitee_id: string;
@@ -31,8 +31,19 @@ export interface OutgoingInvitation {
 export interface SharedAccountCard {
   account: Account;
   viewerRole: MembershipRole;
+  viewerHidden: boolean; // the viewer's own dashboard-hide flag for this account
+  txCount: number;       // shown in the delete confirmation
   members: MemberInfo[];
   pending: OutgoingInvitation[]; // outgoing invites (owner only; [] for members)
+}
+// One bank connection on /accounts (viewer's own connections only).
+export interface BankConnectionInfo {
+  id: string;
+  institution_name: string | null;
+  status: string;
+  consent_expires_at: string | null;
+  created_at: string;
+  accounts: { id: string; name: string }[]; // child accounts, deleted along with it
 }
 export interface Transaction {
   id: string; account_id: string; booking_date: string; amount_cents: number;
